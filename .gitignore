@@ -1,0 +1,29 @@
+# ── Datos reales: nunca ──────────────────────────────
+data/raw/
+output/
+config/pseudonyms_private.json
+
+# Planillas: bloqueo por extensión, no por carpeta.
+# Un archivo mal ubicado no debe poder entrar por descuido.
+*.xlsx
+*.xlsm
+*.xls
+*.csv
+*.tsv
+# Excepción explícita: el dataset sintético sí se publica
+!data/sample/*.csv
+
+# ── Python ───────────────────────────────────────────
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.env
+.ipynb_checkpoints/
+
+# ── Sistema / editor ─────────────────────────────────
+.DS_Store
+Thumbs.db
+desktop.ini
+.vscode/
+.idea/
