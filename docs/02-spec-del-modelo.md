@@ -1,7 +1,7 @@
 # Especificación del modelo de informe
 
 Fase F1 · Contrato funcional del motor
-Versión 1.1 — 31 de octubre de 2026
+Versión 1.2 — 31 de octubre de 2026
 Base empírica: `docs/01-inventario-de-secciones.md`
 
 ---
@@ -71,12 +71,22 @@ Lo que hoy se decide informe por informe, pasa a ser parámetro declarado.
 | `piso_margen_alarma_2` | % | `20,0` | Segundo umbral: alerta severa |
 | `piso_margen_objetivo` | % | `26,0` | Nivel de recuperación declarado |
 | `alarma_por_tendencia` | n.º de meses | `3` | Dispara por caída sostenida, sin importar el nivel |
+| `canal` | `ambos` · `canal_verde` · `stock_verde` | `ambos` | Sub-canal incluido en el cálculo |
 | `modo_publicacion` | `interno` · `publico` | `interno` | Activa la anonimización |
 
 **Por qué `corte_comparativo` es parámetro.** Septiembre produjo tres informes
 con tres cortes. Ninguno está mal; el problema es que la elección era
 invisible. Declarada como parámetro, aparece en el encabezado y en la nota
 metodológica, y queda claro por qué dos informes del mismo mes difieren.
+
+**Por qué `canal` es parámetro.** El sector opera dos sub-canales sobre la
+misma planilla. *Canal Verde* publica el catálogo del proveedor y compra recién
+después de vender; *Stock Verde* son los productos que ya demostraron demanda y
+que la empresa pasó a comprar en firme para despachar más rápido. Los dos son
+del mismo sector y los dos los gestiona la misma persona, de modo que el total
+es la cifra correcta y así se reportó siempre. Pero son dos modelos económicos
+distintos —uno inmoviliza capital y el otro no— y el default `ambos` no debe
+impedir aislarlos. Ver `mod.graduacion`.
 
 Los cortes `cuatrimestral`, `semestral` y `anual` todavía no tienen precedente
 en el corpus — la serie arranca en abril de 2026 y el primer cierre anual
@@ -258,6 +268,7 @@ aplicada** (ver §7).
 | `mod.evolucion` | Evolución dentro del período | Dato semanal disponible y dispersión ≥ 1,5× entre semana pico y valle | **Numérico** |
 | `mod.capacidad` | Capacidad y productividad operativa | Cambió la dotación, o se pidió la medición | Binario |
 | `mod.evolucion_larga` | Analítica del corte largo | `corte_comparativo ≠ mensual` | Paramétrico |
+| `mod.graduacion` | Canal Verde y Stock Verde | Hay filas de ambos sub-canales en el período | Binario |
 | `mod.carga_siguiente` | Carga de trabajo del período siguiente | Carga entrante > capacidad medida | **Cualitativo** |
 
 **[DECISIÓN] Umbral de `mod.logistica` = 0,25% de facturación.**
@@ -271,6 +282,35 @@ En junio y julio la semana pico concentraba notoriamente más que el resto. En
 agosto la distribución se emparejó y la sección perdió sentido analítico — pero
 se emitió igual. El umbral evita emitir una sección que solo dice "estuvo
 parejo".
+
+**[DECISIÓN 31/10/2026] `mod.graduacion` — el mecanismo de graduación.**
+
+El módulo reporta, para cada sub-canal: facturación, participación sobre el
+total, margen neto y cantidad de operaciones. Más dos datos propios:
+
+- **Los productos graduados en el período** — los que pasaron de Canal Verde a
+  Stock Verde. Cada graduación deja rastro en la planilla, de modo que es un
+  dato medido, no declarado.
+- **El porcentaje del canal que no inmoviliza capital** — la participación de
+  Canal Verde sobre el total.
+
+Existe porque el mecanismo es el argumento más fuerte del sector y hasta hoy
+nunca se reportó. Canal Verde publica el catálogo completo sin riesgo, el
+mercado define qué se vende, y recién entonces la empresa compra en firme. Dicho
+de otro modo: **el canal descubre, sin inmovilizar capital, en qué productos
+vale la pena inmovilizarlo.** Eso lo convierte en un insumo de las decisiones de
+compra de la empresa, no solo en un canal de venta.
+
+El módulo también vigila el riesgo del mecanismo. En la medición de septiembre
+de 2026, Stock Verde rindió 17,2% de margen contra 25,6% de Canal Verde, cuando
+hasta agosto los dos iban parejos. La hipótesis a verificar es que comprar en
+firme expone a la caída de precio de mercado entre la compra y la venta — un
+riesgo que el dropshipping no tiene, porque compra al precio del día. Si se
+confirma, la parte que inmoviliza capital es también la que pierde margen, y eso
+es una decisión de negocio, no una observación de informe.
+
+*Invariante:* el margen de cada sub-canal se reporta por separado. El margen
+agregado solo no permite ver esta divergencia.
 
 **Nota sobre los umbrales cualitativos.** `mod.factor_del_mes` y
 `mod.carga_siguiente` no admiten umbral numérico: dependen de información que
@@ -459,7 +499,9 @@ Declarado para que no se discuta después:
 | D3 | Formato de salida de A1 y A2: `.docx` | **Cerrada 31/10.** Generado con `python-docx` |
 | D4 | Mes base del índice de anonimización: abril 2026 = 100 | **Cerrada.** Decidida 23/10, confirmada 31/10 |
 | D5 | Cortes `cuatrimestral`, `semestral` y `anual`: sin precedente en el corpus | Declarados; se validan con el primer cierre que los use |
+| D6 | Parámetro `canal` y `mod.graduacion` | **Cerrada 31/10.** El total (`ambos`) es la cifra correcta e histórica; el módulo aísla los dos modelos |
+| D7 | Divergencia de margen entre sub-canales desde septiembre | **Abierta.** Verificar producto por producto si el deterioro de Stock Verde viene de la caída de precio posterior a la compra en firme |
 
 ---
 
-*Marcos Olmedo Wasmuth — executive-report-engine · F1 · spec v1.1*
+*Marcos Olmedo Wasmuth — executive-report-engine · F1 · spec v1.2*
