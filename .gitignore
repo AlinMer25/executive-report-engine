@@ -1,5 +1,6 @@
 # ── Datos reales: nunca ──────────────────────────────
 data/raw/
+data/snapshots/
 output/
 config/pseudonyms_private.json
 
