@@ -115,13 +115,23 @@ condiciones presentes en los meses donde aparece y ausentes donde no.
 Dos módulos desaparecen en septiembre sin una línea que lo explique.
 
 **Logística de envíos** corrió tres meses consecutivos con el mismo
-diagnóstico. Junio: −$317K, prioridad máxima. Julio: −$982K, "prioridad
-máxima para agosto", responsable identificado (FvG Envios, −$792K). Agosto:
-−$726K, "tercer mes consecutivo en rojo", "es el mismo diagnóstico hace tres
-meses y sigue sin resolverse". Y en septiembre la sección **no existe**. No
-hay cifra de cierre, no hay nota de que se resolvió, no hay nota de que se
-dejó de medir. Un problema que se escaló durante tres informes simplemente
-deja de aparecer.
+diagnóstico. Junio: prioridad máxima. Julio: "prioridad máxima para agosto",
+con el responsable identificado. Agosto: "tercer mes consecutivo en rojo", "es
+el mismo diagnóstico hace tres meses y sigue sin resolverse". Y en septiembre
+la sección **no existe**: sin cifra de cierre y sin nota.
+
+**El motivo, confirmado después del relevamiento (31/10/2026).** La sección se
+retiró por decisión deliberada y por una razón sólida: el balance de envíos no
+era una métrica objetiva. Registra como pérdida un costo que está incorporado
+al precio de venta, de modo que las modalidades con flete incluido aparecen
+sistemáticamente en rojo aunque el costo esté recuperado. Medido sobre
+julio–septiembre, el método con el peor balance del canal resultó tener a la
+vez el mejor margen de todos los métodos grandes.
+
+Retirar una métrica que induce a error es lo correcto. **Lo que faltó fue
+dejarlo escrito.** Sin esa línea, una decisión bien tomada es indistinguible de
+un olvido, y el lector del informe siguiente —o el propio autor seis meses
+después— no tiene forma de saber cuál de las dos cosas pasó.
 
 **Evolución dentro del mes** corre cuatro informes y desaparece en el
 mismo corte, pese a que septiembre es precisamente el mes donde el dato
@@ -130,11 +140,14 @@ es exactamente una evolución intramensual, y aparece reubicada dentro de
 "Factor del mes" en lugar de en su sección.
 
 **Lo que esto le exige al modelo.** Un módulo no puede tener solo condición
-de entrada: necesita **condición de salida declarada**. Si la logística de
-envíos deja de reportarse, el informe debe decir por qué — se resolvió, bajó
-del umbral, o se dejó de medir. Sin eso, el formato permite que un problema
-desaparezca del reporting sin haberse resuelto, y esa es una falla del
-sistema, no del analista.
+de entrada: necesita **condición de salida declarada**. Si una sección deja de
+reportarse, el informe debe decir por qué — se resolvió, bajó del umbral, se
+dejó de medir, o la métrica resultó no ser válida.
+
+La regla nació pensada para atrapar olvidos y resultó servir para algo mejor:
+**registrar decisiones correctas que de otro modo parecen olvidos.** El caso de
+la logística es exactamente eso. Una línea de cierre no cuesta nada y convierte
+un hueco inexplicado en una decisión documentada.
 
 Esta regla —*todo módulo declara entrada y salida*— es el primer requisito
 funcional que el inventario produce.
