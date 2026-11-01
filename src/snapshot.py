@@ -12,8 +12,8 @@ sino dejar constancia de contra qué datos se calculó cada informe.
 
 Cada congelado produce dos archivos:
 
-    data/snapshots/2026-09/20261005T0930.csv    los datos
-    data/snapshots/2026-09/20261005T0930.json   la ficha de control
+    data/snapshots/2026-09/20261005T093012.csv   los datos
+    data/snapshots/2026-09/20261005T093012.json  la ficha de control
 
 La ficha guarda fecha, huella digital, cantidad de filas y los totales del
 período. Con eso, cualquier informe se puede regenerar idéntico dentro de un
@@ -97,8 +97,20 @@ def congelar(df: pd.DataFrame, periodo: str, etiqueta: str = "") -> Path:
     carpeta = DIR_SNAPSHOTS / periodo
     carpeta.mkdir(parents=True, exist_ok=True)
 
-    # El nombre es la fecha y hora: ordena solo y nunca se pisa.
-    sello = datetime.now().strftime("%Y%m%dT%H%M")
+    # El nombre es la fecha y hora con segundos: ordena solo y es legible.
+    # Si dos congelados caen en el mismo segundo, se agrega un sufijo: una
+    # foto no puede pisar a otra en silencio, porque el objetivo mismo de
+    # este módulo es que ninguna versión se pierda.
+    sello = datetime.now().strftime("%Y%m%dT%H%M%S")
+    # El sufijo es una letra, no un guion con número: así el orden
+    # alfabético de los archivos sigue coincidiendo con el cronológico,
+    # que es de lo que dependen 'primera' y 'ultima' al releer.
+    if (carpeta / f"{sello}.csv").exists():
+        from string import ascii_lowercase
+        for letra in ascii_lowercase[1:]:
+            if not (carpeta / f"{sello}{letra}.csv").exists():
+                sello = f"{sello}{letra}"
+                break
     ruta_datos = carpeta / f"{sello}.csv"
     ruta_ficha = carpeta / f"{sello}.json"
 
@@ -149,7 +161,7 @@ def listar(periodo: str | None = None) -> pd.DataFrame:
 def cargar(periodo: str, version: str = "ultima") -> pd.DataFrame:
     """Relee un dataset congelado.
 
-    version : 'ultima', 'primera', o el sello exacto ('20261005T0930').
+    version : 'ultima', 'primera', o el sello exacto ('20261005T093012').
     """
     carpeta = DIR_SNAPSHOTS / periodo
     disponibles = sorted(carpeta.glob("*.csv"))
