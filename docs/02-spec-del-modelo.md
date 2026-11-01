@@ -1,7 +1,7 @@
 # Especificación del modelo de informe
 
 Fase F1 · Contrato funcional del motor
-Versión 1.2 — 31 de octubre de 2026
+Versión 1.3 — 31 de octubre de 2026
 Base empírica: `docs/01-inventario-de-secciones.md`
 
 ---
@@ -264,18 +264,66 @@ aplicada** (ver §7).
 |---|---|---|---|
 | `mod.integridad` | Nota de integridad de datos | Hubo depuración que altera cifras ya publicadas | Binario |
 | `mod.factor_del_mes` | Factor del mes | Evento exógeno explica más que las métricas | **Cualitativo** |
-| `mod.logistica` | Análisis de logística de envíos | \|balance\| ≥ 0,25% de facturación | **Numérico** |
+| `mod.logistica` | Dónde se pierde margen | Hay al menos una plataforma o método con fuga real (§5.3) | **Numérico** |
 | `mod.evolucion` | Evolución dentro del período | Dato semanal disponible y dispersión ≥ 1,5× entre semana pico y valle | **Numérico** |
 | `mod.capacidad` | Capacidad y productividad operativa | Cambió la dotación, o se pidió la medición | Binario |
 | `mod.evolucion_larga` | Analítica del corte largo | `corte_comparativo ≠ mensual` | Paramétrico |
 | `mod.graduacion` | Canal Verde y Stock Verde | Hay filas de ambos sub-canales en el período | Binario |
 | `mod.carga_siguiente` | Carga de trabajo del período siguiente | Carga entrante > capacidad medida | **Cualitativo** |
 
-**[DECISIÓN] Umbral de `mod.logistica` = 0,25% de facturación.**
-Calibrado contra la serie real: junio 0,40%, julio 0,46%, agosto 0,32%. Con
-este umbral, los tres meses que efectivamente emitieron la sección la habrían
-emitido igual. Si septiembre hubiera quedado por debajo, el módulo habría
-emitido su **línea de cierre** en lugar de desaparecer.
+**[DECISIÓN 31/10/2026 — reemplaza el umbral anterior] `mod.logistica`.**
+
+El umbral original era *balance de envíos ≥ 0,25% de la facturación*. **Se
+descarta: mide el tamaño de la plataforma, no el problema.** Ver §5.3.
+
+La condición de entrada pasa a ser: existe al menos una plataforma o método de
+envío que cumpla simultáneamente las tres condiciones de **fuga real**:
+
+| Condición | Valor |
+|---|---|
+| Balance de envíos negativo | < 0 |
+| Margen por debajo de la referencia del canal | ≥ 1,0 pp |
+| Participación en la facturación | ≥ 1,0% |
+
+La tercera condición evita que una plataforma de tres operaciones encabece el
+ranking por un margen extremo sobre una base irrelevante.
+
+El módulo reporta, ordenado por **costo en pesos** y no por balance de envíos:
+el margen de cada fila, su brecha contra la referencia, y cuánta ganancia se
+habría obtenido operando al margen del canal.
+
+**§5.3 — Por qué el balance de envíos no mide una fuga.**
+
+Medido sobre julio–septiembre de 2026, el método con el peor balance de envíos
+del canal (−$2,77 M) tiene a la vez **el mejor margen de todos los métodos
+grandes**: 25,47% contra una referencia de 24,74%. Si fuera una fuga, el margen
+estaría hundido; está por encima del promedio.
+
+La explicación es operativa: en esa modalidad el costo del flete está
+incorporado al precio de venta. El marketplace registra pago de envío cero —el
+cliente no lo pagó por separado— pero el ingreso ya lo contiene. La pérdida es
+nominal. Lo mismo ocurre en las publicaciones con envío gratis, donde el pago
+registrado es cero por definición.
+
+Durante tres informes consecutivos esa modalidad fue "la fuga más grande" y
+"prioridad máxima". Era la plataforma más grande, nada más.
+
+**Pero la inversa no se cumple, y ése es el punto central.** Que el costo esté
+incorporado al precio es una **política, no un resultado**. Dos plataformas con
+la misma política de envío gratis rinden 19,67% y 18,95% —cinco puntos por
+debajo del canal— mientras otra con la misma política rinde por encima. El
+precio no siempre alcanza a cubrir el flete, y cuando no alcanza, el margen cae
+igual.
+
+La única evidencia de que la política funcionó es el margen. Por eso el módulo
+cruza las dos señales y ninguna sirve sola:
+
+- El **balance de envíos** dice que hubo un costo. No dice si se recuperó.
+- El **margen** dice si se recuperó. No dice por qué.
+
+Aplicado a julio–septiembre, el criterio marca cinco plataformas que
+concentran **$4,79 millones de ganancia no obtenida**. Ninguna de ellas era la
+que los informes venían señalando.
 
 **[DECISIÓN] Umbral de `mod.evolucion` = dispersión ≥ 1,5×.**
 En junio y julio la semana pico concentraba notoriamente más que el resto. En
@@ -495,13 +543,15 @@ Declarado para que no se discuta después:
 | # | Decisión | Estado |
 |---|---|---|
 | D1 | Pisos de margen: 23,0% / 20,0% + tendencia de 3 meses | **Cerrada 31/10.** Conversar el valor con José cuando haya un mes medido con el sistema |
-| D2 | Umbral de `mod.logistica`: 0,25% de facturación | **Cerrada 31/10.** Calibrada contra jun 0,40% · jul 0,46% · ago 0,32% |
+| D2 | Umbral de `mod.logistica` | **Reemplazada 31/10.** El 0,25% de facturación medía tamaño, no problema. Pasa al criterio de fuga real: balance negativo + brecha ≥ 1,0 pp + participación ≥ 1,0% |
 | D3 | Formato de salida de A1 y A2: `.docx` | **Cerrada 31/10.** Generado con `python-docx` |
 | D4 | Mes base del índice de anonimización: abril 2026 = 100 | **Cerrada.** Decidida 23/10, confirmada 31/10 |
 | D5 | Cortes `cuatrimestral`, `semestral` y `anual`: sin precedente en el corpus | Declarados; se validan con el primer cierre que los use |
 | D6 | Parámetro `canal` y `mod.graduacion` | **Cerrada 31/10.** El total (`ambos`) es la cifra correcta e histórica; el módulo aísla los dos modelos |
 | D7 | Divergencia de margen entre sub-canales desde septiembre | **Abierta.** Verificar producto por producto si el deterioro de Stock Verde viene de la caída de precio posterior a la compra en firme |
+| D8 | `Pago x Envío` contaminada en 44 filas (se copió el costo) | **Cerrada 31/10.** El envío se lee de `Diferencia Envío`, que es un hecho registrado. La versión recalculada queda solo para auditoría |
+| D9 | Envío gratis: la política de incorporar el flete al precio no siempre lo cubre | **Abierta.** Revisar el pricing de las plataformas marcadas con fuga real antes del informe de octubre |
 
 ---
 
-*Marcos Olmedo Wasmuth — executive-report-engine · F1 · spec v1.2*
+*Marcos Olmedo Wasmuth — executive-report-engine · F1 · spec v1.3*
