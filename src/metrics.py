@@ -195,23 +195,27 @@ def contraste(df: pd.DataFrame, tolerancia: float = 1.0) -> pd.DataFrame:
     for calculada, de_planilla in PARES_DE_CONTRASTE:
         if de_planilla not in df.columns:
             continue
-        diferencia = (df[calculada] - df[de_planilla]).abs()
-        marcadas = df[diferencia > tolerancia]
-        for i in marcadas.index:
-            hallazgos.append({
-                "fila": int(i),
-                "fecha": df.at[i, cfg.FECHA],
-                "producto": df.at[i, cfg.PRODUCTO],
+        diferencia = df[calculada] - df[de_planilla]
+        marcadas = df[diferencia.abs() > tolerancia]
+
+        # Se arma la tabla por columnas en vez de fila por fila. Es más
+        # rápido, y además evita el acceso df.at[fila, columna], que
+        # devuelve un valor de tipo indefinido para el verificador de tipos.
+        if len(marcadas):
+            hallazgos.append(pd.DataFrame({
+                "fila": marcadas.index,
+                "fecha": marcadas[cfg.FECHA].to_numpy(),
+                "producto": marcadas[cfg.PRODUCTO].to_numpy(),
                 "metrica": calculada.replace("calc_", ""),
-                "motor": round(float(df.at[i, calculada]), 2),
-                "planilla": round(float(df.at[i, de_planilla]), 2),
-                "diferencia": round(float(df.at[i, calculada] - df.at[i, de_planilla]), 2),
-            })
+                "motor": marcadas[calculada].round(2).to_numpy(),
+                "planilla": marcadas[de_planilla].round(2).to_numpy(),
+                "diferencia": diferencia[marcadas.index].round(2).to_numpy(),
+            }))
 
     if not hallazgos:
         return pd.DataFrame(columns=["fila", "fecha", "producto", "metrica",
                                      "motor", "planilla", "diferencia"])
-    return pd.DataFrame(hallazgos).sort_values(
+    return pd.concat(hallazgos, ignore_index=True).sort_values(
         "diferencia", key=lambda s: s.abs(), ascending=False
     )
 
