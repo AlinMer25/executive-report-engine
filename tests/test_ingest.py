@@ -1,14 +1,14 @@
 """Tests de la carga: conversión de números, descartes y filtros."""
-
+ 
 import pandas as pd
 import pytest
-
+ 
 from src import config as cfg
 from src.ingest import a_numero, cargar_ventas, verificar_columnas
-
-
+ 
+ 
 # ── Conversión de números en formato argentino ────────────────────────
-
+ 
 @pytest.mark.parametrize("texto, esperado", [
     (" $399.999,00", 399999.00),   # con símbolo, miles y decimales
     ("48.400,00",     48400.00),   # sin símbolo
@@ -21,52 +21,77 @@ from src.ingest import a_numero, cargar_ventas, verificar_columnas
 def test_convierte_formato_argentino(texto, esperado):
     """El punto separa miles y la coma decimales, al revés que en Python."""
     assert a_numero(pd.Series([texto])).iloc[0] == pytest.approx(esperado)
-
-
+ 
+ 
+def test_decide_el_formato_por_columna_no_por_valor():
+    """El caso que rompió al parser anterior: el factor de IVA 1.105.
+ 
+    Mirando ese valor solo, '1.105' puede ser mil ciento cinco (formato
+    argentino) o uno coma ciento cinco (estándar), y las dos lecturas son
+    defendibles. Mirando la columna entera no hay ambigüedad.
+    """
+    estandar = a_numero(pd.Series(["1.105", "1.21", "1.105"]))
+    assert estandar.tolist() == [1.105, 1.21, 1.105]
+ 
+    argentina = a_numero(pd.Series([" $399.999,00", "48.400,00", "1.105"]))
+    assert argentina.tolist() == [399999.0, 48400.0, 1105.0]
+ 
+ 
+def test_las_columnas_numericas_son_decimales():
+    """Aunque todos los valores sean enteros.
+ 
+    Si pandas elige tipo entero, después falla al guardar un decimal ahí
+    —dividir el envío por 1,21 levanta un error— y el motor anda con un
+    dataset y no con otro.
+    """
+    enteros = a_numero(pd.Series(["100", "200", "300"]))
+    assert pd.api.types.is_float_dtype(enteros)
+ 
+ 
 @pytest.mark.parametrize("texto", ["", None, "Canal Verde", "   "])
 def test_lo_no_numerico_queda_nulo_no_cero(texto):
     """Un cero se sumaría; un nulo se puede contar aparte. La diferencia importa."""
     assert pd.isna(a_numero(pd.Series([texto])).iloc[0])
-
-
+ 
+ 
 # ── Verificación de columnas ──────────────────────────────────────────
-
+ 
 def test_falla_si_falta_una_columna_obligatoria(ventas_mixtas):
     """Mejor un error ruidoso que un resultado incompleto en silencio."""
     sin_canal = ventas_mixtas.drop(columns=[cfg.CANAL])
     with pytest.raises(ValueError, match="Faltan columnas"):
         verificar_columnas(sin_canal)
-
-
+ 
+ 
 def test_el_error_nombra_la_columna_que_falta(ventas_mixtas):
     """Un mensaje útil dice qué arreglar, no solo que algo falló."""
     sin_canal = ventas_mixtas.drop(columns=[cfg.CANAL])
     with pytest.raises(ValueError) as e:
         verificar_columnas(sin_canal)
     assert cfg.CANAL in str(e.value)
-
-
+ 
+ 
 # ── Carga completa ────────────────────────────────────────────────────
-
+ 
 def test_descarta_las_filas_de_plantilla(planilla_xlsx):
     """La fila sin mes y con monto cero no es una venta."""
     df = cargar_ventas(planilla_xlsx)
     assert len(df) == 4          # de las 5 originales
     assert (df[cfg.MONTO] > 0).all()
-
-
+ 
+ 
 def test_filtro_de_canal(planilla_xlsx):
     """'ambos' es el default y es la cifra histórica del canal."""
     assert len(cargar_ventas(planilla_xlsx)) == 4
     assert len(cargar_ventas(planilla_xlsx, canal="canal_verde")) == 3
     assert len(cargar_ventas(planilla_xlsx, canal="stock_verde")) == 1
-
-
+ 
+ 
 def test_canal_invalido_falla_con_las_opciones(planilla_xlsx):
     with pytest.raises(ValueError, match="canal_verde"):
         cargar_ventas(planilla_xlsx, canal="verde")
-
-
+ 
+ 
 def test_las_columnas_quedan_numericas(planilla_xlsx):
     """Si quedaran como texto, cualquier suma concatenaría en vez de sumar."""
     df = cargar_ventas(planilla_xlsx)

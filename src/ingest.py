@@ -19,22 +19,44 @@ from . import config as cfg
 # ──────────────────────────────────────────────────────────────────────
 
 def a_numero(serie: pd.Series) -> pd.Series:
-    """Convierte texto en formato argentino a número.
+    """Convierte texto a número decidiendo el formato por columna.
 
-    La planilla guarda ' $399.999,00': el punto separa miles y la coma
-    los decimales, al revés que en Python. Sin convertir, cualquier suma
-    daría error o, peor, concatenaría textos.
+    La planilla exporta en formato argentino —' $399.999,00', punto para
+    miles y coma para decimales— pero un archivo generado por otro programa
+    escribe '399999.0', con el punto como decimal. Las dos formas tienen que
+    dar el mismo número.
 
-    Lo que no se puede convertir queda como nulo (NA), nunca como cero:
-    un cero es un dato y se sumaría; un nulo es la ausencia de dato y se
-    puede contar aparte.
+    **La decisión se toma una vez por columna, no valor por valor**, y ese
+    detalle es el que hace que funcione. Decidir por valor parece más fino y
+    es peor: el factor de IVA '1.105' se lee como mil ciento cinco en formato
+    argentino y como uno coma ciento cinco en el estándar, y las dos lecturas
+    son defendibles mirando ese valor solo. Mirando la columna entera no hay
+    ambigüedad, porque una columna viene de una sola fuente con un solo
+    formato.
+
+    El criterio: si **algún** valor de la columna tiene coma decimal, o
+    alguno tiene dos o más grupos de miles ('1.234.567'), la columna está en
+    formato argentino. Si no, el punto es decimal.
+
+    Lo que no se puede convertir queda nulo (NA), nunca cero: un cero se
+    sumaría; un nulo es la ausencia de dato y se puede contar aparte.
     """
     s = serie.astype("string")
     s = s.str.replace(r"[^\d,.\-()]", "", regex=True)      # quita $, espacios, %
     s = s.str.replace(r"^\((.*)\)$", r"-\1", regex=True)   # (1.234) → -1.234
-    s = s.str.replace(".", "", regex=False)                # punto = miles
-    s = s.str.replace(",", ".", regex=False)               # coma = decimal
-    return pd.to_numeric(s, errors="coerce")
+
+    hay_coma = bool(s.str.contains(",", na=False).any())
+    hay_miles = bool(s.str.fullmatch(r"-?\d{1,3}(?:\.\d{3}){2,}", na=False).any())
+
+    if hay_coma or hay_miles:
+        s = s.str.replace(".", "", regex=False).str.replace(",", ".", regex=False)
+
+    # Se fuerza a decimal aunque todos los valores sean enteros. Si no,
+    # pandas elige tipo entero y después falla al guardar un decimal ahí:
+    # dividir el envío por 1,21 sobre una columna entera levanta un error.
+    # Que el tipo dependa de los datos que tocó cargar hace que el motor
+    # ande con un dataset y no con otro, que es la peor clase de defecto.
+    return pd.to_numeric(s, errors="coerce").astype("Float64")
 
 
 # Columnas que deben quedar numéricas después de cargar.

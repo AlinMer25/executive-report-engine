@@ -96,8 +96,8 @@ def _r11_duplicado_exacto(d):
 def _r12_comision_fuera_de_rango(d):
     return (d[cfg.COMISION_PCT] < 0) | (d[cfg.COMISION_PCT] > cfg.COMISION_PCT_MAX)
 
-# Reglas 13 y 14: no están en el diccionario original. Nacen de problemas
-# detectados al perfilar los datos el 31/10/2026.
+# Reglas 13 a 15: no están en el diccionario original. Nacen de problemas
+# detectados al perfilar los datos reales.
 
 def _r13_envio_no_derivable(d):
     """La diferencia de envío no se deriva de sus propios insumos.
@@ -108,6 +108,20 @@ def _r13_envio_no_derivable(d):
     if m.C_DIF_ENVIO_RECALC not in d.columns:
         return pd.Series(False, index=d.index)
     return (d[m.C_DIF_ENVIO_RECALC] - d[cfg.DIFERENCIA_ENVIO]).abs() > 1
+
+def _r15_factor_iva_invalido(d):
+    """El factor de IVA no es 1,105 ni 1,21.
+
+    Cuando vale 1, el costo no se netea de IVA y el margen queda
+    distorsionado: hacia arriba si además falta el costo, hacia abajo si el
+    costo está cargado. Nada falla, el número sale mal y nadie lo ve.
+
+    No estaba en el diccionario. Apareció al revisar los valores que toma
+    esa columna en los datos reales.
+    """
+    v = d[cfg.CALCULO_IVA]
+    return v.isna() | ~v.round(3).isin(cfg.FACTORES_IVA_VALIDOS)
+
 
 def _r14_sin_canal(d):
     c = d[cfg.CANAL].astype("string").str.strip()
@@ -149,6 +163,10 @@ REGLAS = [
      _r13_envio_no_derivable),
     ("R14", "Operación sin canal asignado", MEDIA,
      "Completar con Canal Verde o Stock Verde.", _r14_sin_canal),
+    ("R15", "Factor de IVA inválido", ALTA,
+     "Asignar la alícuota del producto (10,5% o 21%). Sin ella el costo no "
+     "se netea de IVA y el margen sale mal sin que nada falle.",
+     _r15_factor_iva_invalido),
 ]
 
 

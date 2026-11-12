@@ -117,6 +117,11 @@ EMPRESAS_NEGRO = {10, 510}
 TASA_IIBB = 0.04      # 4%, solo en ventas Blanco
 IVA_ENVIO = 1.21      # el flete siempre tributa 21%, sea cual sea el producto
 
+# Los únicos factores de IVA válidos: 10,5% y 21%. Un valor fuera de estos
+# dos significa que el producto no tiene alícuota asignada, y el costo deja
+# de netearse de IVA sin que nada falle.
+FACTORES_IVA_VALIDOS = (1.105, 1.21)
+
 
 # ──────────────────────────────────────────────────────────────────────
 # Umbrales del spec
