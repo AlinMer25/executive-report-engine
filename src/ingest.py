@@ -9,6 +9,7 @@ La frontera importa. Si la carga también calculara, un error de lectura y un
 error de fórmula se confundirían, y el descuadre sería imposible de ubicar.
 """
 
+import openpyxl
 import pandas as pd
 
 from . import config as cfg
@@ -76,6 +77,34 @@ COLUMNAS_NUMERICAS = [
 # Pasos de la carga
 # ──────────────────────────────────────────────────────────────────────
 
+def detectar_errores_formula(ruta, hoja: str) -> list[str]:
+    """Lista, fila por fila, los errores de fórmula de la planilla.
+
+    Tiene que correr ANTES de que pandas lea el archivo. pandas convierte
+    #¡REF!, #¡VALOR!, #¡DIV/0! y el resto en celdas vacías sin avisar: el
+    error se pierde y el total baja en silencio. openpyxl, en cambio, los
+    conserva y los marca con el tipo 'e' (error).
+
+    Devuelve una lista con un texto por fila de datos, en el mismo orden que
+    las filas del DataFrame: vacío si la fila está sana, o algo como
+    "Monto por Venta: #REF!; IIBB: #DIV/0!" si no.
+    """
+    # read_only=True: lee sin cargar todo el libro en memoria a la vez.
+    # data_only=True: trae el resultado de cada fórmula, no la fórmula.
+    libro = openpyxl.load_workbook(ruta, read_only=True, data_only=True)
+    filas = libro[hoja].iter_rows(values_only=False)
+    encabezados = [c.value for c in next(filas)]
+
+    resultado = []
+    for fila in filas:
+        errores = [f"{encabezados[i]}: {celda.value}"
+                   for i, celda in enumerate(fila)
+                   if celda.data_type == "e" and i < len(encabezados)]
+        resultado.append("; ".join(errores))
+    libro.close()
+    return resultado
+
+
 def verificar_columnas(df: pd.DataFrame) -> None:
     """Falla de entrada si falta una columna imprescindible.
 
@@ -102,7 +131,15 @@ def descartar_filas_vacias(df: pd.DataFrame) -> pd.DataFrame:
     """
     tiene_mes = df[cfg.MES].notna() & (df[cfg.MES].astype("string").str.strip() != "")
     tiene_monto = df[cfg.MONTO].notna() & (df[cfg.MONTO] > 0)
-    return df[tiene_mes & tiene_monto].copy()
+
+    # Una fila con error de fórmula NO es una fila vacía, aunque su monto
+    # haya llegado vacío. Si se descartara, la venta desaparecería sin
+    # rastro. Se conserva para que la validación (R16) la señale.
+    tiene_error = pd.Series(False, index=df.index)
+    if cfg.ERRORES_FORMULA in df.columns:
+        tiene_error = df[cfg.ERRORES_FORMULA].astype("string").str.len().fillna(0) > 0
+
+    return df[tiene_mes & (tiene_monto | tiene_error)].copy()
 
 
 def normalizar_texto(df: pd.DataFrame) -> pd.DataFrame:
@@ -179,6 +216,11 @@ def cargar_ventas(ruta, canal: str = "ambos", hoja: str = cfg.HOJA_VENTAS) -> pd
     # y medio texto. Mejor leer todo como texto y convertir nosotros,
     # con reglas que podemos leer y testear.
     df = pd.read_excel(ruta, sheet_name=hoja, dtype=str)
+
+    # Los errores se buscan antes de convertir, porque la conversión los
+    # borra. Se guardan en una columna propia que viaja con cada fila.
+    errores = detectar_errores_formula(ruta, hoja)
+    df[cfg.ERRORES_FORMULA] = (errores + [""] * len(df))[:len(df)]
 
     verificar_columnas(df)
     df = convertir_numeros(df)

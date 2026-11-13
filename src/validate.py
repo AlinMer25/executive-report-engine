@@ -96,7 +96,7 @@ def _r11_duplicado_exacto(d):
 def _r12_comision_fuera_de_rango(d):
     return (d[cfg.COMISION_PCT] < 0) | (d[cfg.COMISION_PCT] > cfg.COMISION_PCT_MAX)
 
-# Reglas 13 a 15: no están en el diccionario original. Nacen de problemas
+# Reglas 13 a 16: no están en el diccionario original. Nacen de problemas
 # detectados al perfilar los datos reales.
 
 def _r13_envio_no_derivable(d):
@@ -121,6 +121,18 @@ def _r15_factor_iva_invalido(d):
     """
     v = d[cfg.CALCULO_IVA]
     return v.isna() | ~v.round(3).isin(cfg.FACTORES_IVA_VALIDOS)
+
+
+def _r16_error_de_formula(d):
+    """La fila tiene una o más celdas con error de fórmula.
+
+    #¡REF!, #¡VALOR!, #¡DIV/0!, #N/A y compañía. El motor no puede calcular
+    sobre ellas: si la celda es un monto, la venta queda fuera del total.
+    Severidad alta porque el número del informe sale mal sin que nada falle.
+    """
+    if cfg.ERRORES_FORMULA not in d.columns:
+        return pd.Series(False, index=d.index)
+    return d[cfg.ERRORES_FORMULA].astype("string").str.len().fillna(0) > 0
 
 
 def _r14_sin_canal(d):
@@ -167,6 +179,9 @@ REGLAS = [
      "Asignar la alícuota del producto (10,5% o 21%). Sin ella el costo no "
      "se netea de IVA y el margen sale mal sin que nada falle.",
      _r15_factor_iva_invalido),
+    ("R16", "Celda con error de fórmula", ALTA,
+     "Corregir la fórmula en la planilla. La columna '_errores_formula' "
+     "dice qué celda y qué error.", _r16_error_de_formula),
 ]
 
 
@@ -182,7 +197,8 @@ def validar(df: pd.DataFrame, columnas_muestra: list[str] | None = None
 
     if columnas_muestra is None:
         columnas_muestra = [c for c in (cfg.MES, cfg.FECHA, cfg.PLATAFORMA,
-                                        cfg.PRODUCTO, cfg.MONTO, m.C_MARGEN_NETO)
+                                        cfg.PRODUCTO, cfg.MONTO, m.C_MARGEN_NETO,
+                                        cfg.ERRORES_FORMULA)
                             if c in df.columns]
 
     hallazgos = []

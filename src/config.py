@@ -88,6 +88,11 @@ GANANCIA_NETA = "Ganancia Neta post costo de envio"
 MARGEN_NETO = "Margen Neto de Venta"
 
 
+# Columna que agrega el motor (no existe en la planilla): lista los errores
+# de fórmula encontrados en cada fila, p. ej. "Monto por Venta: #REF!".
+# Lleva guion bajo adelante para distinguirla de las columnas originales.
+ERRORES_FORMULA = "_errores_formula"
+
 # Columnas sin las cuales el motor no puede calcular nada.
 # Si alguna falta, la carga falla de entrada con un mensaje claro
 # en vez de producir resultados incompletos en silencio.
