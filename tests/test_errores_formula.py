@@ -19,7 +19,9 @@ def _con_errores(ruta_origen, ruta_destino, errores_por_fila):
     """
     libro = openpyxl.load_workbook(ruta_origen)
     hoja = libro[cfg.HOJA_VENTAS]
-    columnas = {c.value: c.column for c in hoja[1]}
+    # c.column puede ser None en celdas especiales; el "if" las descarta y
+    # le garantiza al verificador que todos los números son enteros.
+    columnas = {c.value: c.column for c in hoja[1] if c.column is not None}
     for fila, (columna, error) in errores_por_fila.items():
         celda = hoja.cell(row=fila + 2, column=columnas[columna])
         celda.value = error

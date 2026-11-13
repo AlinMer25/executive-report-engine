@@ -81,8 +81,12 @@ def indexar_tabla(tabla: pd.DataFrame, fila_base: str | int | None = None
     t = tabla.copy()
     for col in t.columns:
         if col in COLUMNAS_MONETARIAS and pd.api.types.is_numeric_dtype(t[col]):
-            base = t[col].iloc[0] if fila_base is None else t.loc[fila_base, col]
-            t[col] = indexar(t[col], float(base))
+            # .to_numpy(dtype=float) convierte la columna en un arreglo de
+            # decimales. Así el tipo queda definido y el verificador sabe
+            # que la base es un número, no "cualquier cosa".
+            valores = t[col].to_numpy(dtype=float)
+            posicion = 0 if fila_base is None else t.index.get_loc(fila_base)
+            t[col] = indexar(t[col], float(valores[posicion]))
             t = t.rename(columns={col: f"{col}_idx"})
     return t
 
