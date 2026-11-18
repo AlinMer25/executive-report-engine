@@ -1,7 +1,7 @@
 # Especificación del modelo de informe
 
 Fase F1 · Contrato funcional del motor
-Versión 1.4 — 12 de noviembre de 2026
+Versión 1.5 — 13 de noviembre de 2026
 Base empírica: `docs/01-inventario-de-secciones.md`
 
 ---
@@ -552,7 +552,8 @@ Declarado para que no se discuta después:
 | D8 | `Pago x Envío` contaminada en 44 filas (se copió el costo) | **Cerrada 31/10.** El envío se lee de `Diferencia Envío`, que es un hecho registrado. La versión recalculada queda solo para auditoría |
 | D9 | Envío gratis: la política de incorporar el flete al precio no siempre lo cubre | **Abierta.** Revisar el pricing de las plataformas marcadas con fuga real antes del informe de octubre |
 | D10 | Uso del motor con planillas de otra estructura | **Cerrada 12/11.** Se hará por mapeo configurable (esquema canónico: el usuario declara cómo se llaman sus columnas y apaga lo que no aplica), como fase F6 posterior a F5. Se descarta el reconocimiento automático: si adivina mal, calcula con la columna equivocada sin fallar. Límite declarado: la lógica fiscal sigue siendo la del caso original, con partes apagables |
+| D11 | Redacción de los párrafos del informe | **Cerrada 13/11.** El motor genera frases plantilla con los números del período ("La facturación creció 34,1% y el margen cayó 1,64 pp"), que el analista edita y enriquece. La interpretación sigue siendo del analista |
 
 ---
 
-*Marcos Olmedo Wasmuth — executive-report-engine · F1 · spec v1.4*
+*Marcos Olmedo Wasmuth — executive-report-engine · F1 · spec v1.5*
