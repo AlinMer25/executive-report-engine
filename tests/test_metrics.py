@@ -22,7 +22,7 @@ def test_blanco_paga_iibb(venta_blanca):
 
 
 def test_blanco_ganancia_bruta(venta_blanca):
-    """100.000 − 4.000 − 50.000 − 12.100 = 33.900"""
+    """100.000 - 4.000 - 50.000 - 12.100 = 33.900"""
     d = m.calcular(venta_blanca)
     assert d[m.C_GANANCIA_BRUTA].iloc[0] == pytest.approx(33_900)
 
@@ -49,7 +49,7 @@ def test_negro_no_paga_iibb(venta_negra):
 
 
 def test_negro_ganancia_bruta(venta_negra):
-    """121.000 − 0 − 50.000 − 12.100 = 58.900"""
+    """121.000 - 0 - 50.000 - 12.100 = 58.900"""
     d = m.calcular(venta_negra)
     assert d[m.C_GANANCIA_BRUTA].iloc[0] == pytest.approx(58_900)
 
@@ -131,3 +131,11 @@ def test_balance_negativo_con_buen_margen_no_es_fuga():
     t = m.fuga_logistica(df, margen_referencia=24.0, participacion_minima=1.0)
     assert not t.loc["FvG Envios", "fuga_real"]      # pierde flete, buen margen
     assert t.loc["Mercadoenvios", "fuga_real"]        # pierde flete Y margen
+
+
+def test_calcular_sin_columnas_de_envio_opcionales(ventas_mixtas):
+    """Si la planilla no trae Pago x Envio / Costo de Envio Real, el cálculo sigue."""
+    df = ventas_mixtas.drop(columns=[cfg.PAGO_ENVIO, cfg.COSTO_ENVIO], errors="ignore")
+    d = m.calcular(df)
+    assert d[m.C_DIF_ENVIO_RECALC].isna().all()
+    assert d[m.C_GANANCIA_NETA].notna().all()

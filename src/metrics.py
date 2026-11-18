@@ -89,7 +89,12 @@ def calcular(df: pd.DataFrame, origen_envio: str = "planilla") -> pd.DataFrame:
     # costo se recupera por el lado del ingreso y el margen no se resiente.
     # Para saber si hay fuga real hay que mirar el margen del método de
     # envío, no el signo de esta columna. Ver fuga_logistica().
-    d[C_DIF_ENVIO_RECALC] = d[cfg.PAGO_ENVIO] - d[cfg.COSTO_ENVIO]
+    # Columnas opcionales: solo sirven para el contraste de envíos. Si la
+    # planilla no las trae, el informe sigue; el recálculo queda vacío.
+    if cfg.PAGO_ENVIO in d.columns and cfg.COSTO_ENVIO in d.columns:
+        d[C_DIF_ENVIO_RECALC] = d[cfg.PAGO_ENVIO] - d[cfg.COSTO_ENVIO]
+    else:
+        d[C_DIF_ENVIO_RECALC] = float("nan")
     d[C_DIF_ENVIO] = (d[cfg.DIFERENCIA_ENVIO] if origen_envio == "planilla"
                       else d[C_DIF_ENVIO_RECALC])
 

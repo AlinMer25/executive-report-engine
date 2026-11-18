@@ -216,6 +216,9 @@ def cargar_ventas(ruta, canal: str = "ambos", hoja: str = cfg.HOJA_VENTAS) -> pd
     # y medio texto. Mejor leer todo como texto y convertir nosotros,
     # con reglas que podemos leer y testear.
     df = pd.read_excel(ruta, sheet_name=hoja, dtype=str)
+    # Encabezados sin espacios sobrantes: "Pago x Envio " y "Pago x Envio"
+    # pasan a ser la misma columna. Un espacio invisible no rompe el motor.
+    df.columns = [str(c).strip() for c in df.columns]
 
     # Los errores se buscan antes de convertir, porque la conversión los
     # borra. Se guardan en una columna propia que viaja con cada fila.

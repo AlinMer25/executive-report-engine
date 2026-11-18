@@ -79,7 +79,7 @@ IIBB = "IIBB"
 GANANCIA_BRUTA = "Ganancia de Venta Bruta"
 MARGEN_BRUTO = "Margen Bruto"
 
-PAGO_ENVIO = "Pago x Envio "      # ojo: el encabezado real termina en espacio
+PAGO_ENVIO = "Pago x Envio"       # ingest.py limpia los espacios de los encabezados
 COSTO_ENVIO = "Costo de Envio Real"
 DIFERENCIA_ENVIO = "Diferencia Envio"
 DIFERENCIA_ENVIO_SIN_IVA = "Diferencia de envio sin IVA"
