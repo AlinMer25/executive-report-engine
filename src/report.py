@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import argparse
 from datetime import date
+from io import BytesIO
 from pathlib import Path
 from typing import cast
 
@@ -23,7 +24,7 @@ from docx import Document
 from docx.enum.table import WD_TABLE_ALIGNMENT
 from docx.oxml import OxmlElement
 from docx.oxml.ns import qn
-from docx.shared import Pt, RGBColor
+from docx.shared import Cm, Pt, RGBColor
 from docx.styles.style import ParagraphStyle
 
 from . import config as cfg
@@ -129,6 +130,8 @@ def escribir(secciones: list[sc.Seccion], periodo: str, ruta: Path,
             doc.add_paragraph(f)
         for df in s.tablas.values():
             _tabla(doc, df)
+        for png in s.graficos.values():
+            doc.add_picture(BytesIO(png), width=Cm(16))   # bytes → imagen, sin archivo
 
     # ── Nota metodológica (core.metodologia)
     doc.add_heading(f"{len(secciones) + 1}. Nota metodológica", level=1)

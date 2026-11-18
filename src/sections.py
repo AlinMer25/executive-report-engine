@@ -25,6 +25,10 @@ import pandas as pd
 from . import config as cfg
 from . import metrics as m
 
+# Participación mínima (% de facturación) para que algo cuente como relevante
+# en rankings y gráficos. Confirmado en 5%.
+UMBRAL_RELEVANCIA = 5.0
+
 MESES = {1: "enero", 2: "febrero", 3: "marzo", 4: "abril", 5: "mayo",
          6: "junio", 7: "julio", 8: "agosto", 9: "septiembre",
          10: "octubre", 11: "noviembre", 12: "diciembre"}
@@ -44,12 +48,14 @@ class Seccion:
     frases  : párrafos plantilla con los números ya puestos.
     tablas  : tablas para mostrar, con un nombre cada una.
     alertas : callouts destacados (los "puntos de atención").
+    graficos: imágenes PNG (bytes) que report.py inserta después de las tablas.
     """
     id: str
     titulo: str
     frases: list[str] = field(default_factory=list)
     tablas: dict[str, pd.DataFrame] = field(default_factory=dict)
     alertas: list[str] = field(default_factory=list)
+    graficos: dict[str, bytes] = field(default_factory=dict)
 
 
 # ──────────────────────────────────────────────────────────────────────
@@ -193,7 +199,7 @@ def seccion_dimension(df: pd.DataFrame, columna: str, id_: str, titulo: str,
     })
 
     lider = t.index[0]
-    relevantes = t[t["participacion"] >= 5]   # se ignora lo marginal
+    relevantes = t[t["participacion"] >= UMBRAL_RELEVANCIA]   # se ignora lo marginal
     mejor = relevantes["margen_neto"].idxmax()
     peor = relevantes["margen_neto"].idxmin()
     L, M, P = fila(t, lider), fila(t, mejor), fila(t, peor)
@@ -282,8 +288,41 @@ def seccion_atencion(r: dict, r_ant: dict, margenes_previos: list[float]
 # Armado
 # ──────────────────────────────────────────────────────────────────────
 
-def construir(df: pd.DataFrame, periodo: str, meses_tendencia: int = 4
-              ) -> list[Seccion]:
+def serie_mensual(df: pd.DataFrame, periodo: str, meses: int = 6) -> pd.DataFrame:
+    """Facturación y margen de los últimos `meses` meses hasta `periodo` inclusive.
+
+    Los meses sin ventas se saltean (no se dibuja un cero falso).
+    """
+    filas = {}
+    for k in range(meses - 1, -1, -1):
+        p = periodo_anterior(periodo, k)
+        datos = filtrar_periodo(df, p)
+        if not datos.empty:
+            r = m.resumen(datos)
+            filas[p] = {"facturacion": r["facturacion"], "margen_neto": r["margen_neto"]}
+    return pd.DataFrame.from_dict(filas, orient="index")
+
+
+def _agregar_graficos(secciones: list[Seccion], df: pd.DataFrame,
+                      actual: pd.DataFrame, periodo: str, margen: float) -> None:
+    """Cuelga cada gráfico de la sección a la que pertenece."""
+    from . import charts                    # import local: solo si hay gráficos
+
+    por_id = {s.id: s for s in secciones}
+    por_id["core.kpis"].graficos["evolucion"] = charts.evolucion(
+        serie_mensual(df, periodo))
+
+    plat = m.por_dimension(actual, cfg.PLATAFORMA)
+    plat = plat[plat["participacion"] >= UMBRAL_RELEVANCIA]
+    por_id["core.plataformas"].graficos["margen"] = charts.margen_por_dimension(
+        plat, margen, "Margen neto por plataforma (participación ≥ 5%)")
+
+    por_id["core.categorias"].graficos["fact_gan"] = charts.facturacion_y_ganancia(
+        m.por_dimension(actual, cfg.CATEGORIA), "Facturación y ganancia neta por categoría")
+
+
+def construir(df: pd.DataFrame, periodo: str, meses_tendencia: int = 4,
+              graficos: bool = True) -> list[Seccion]:
     """Arma las secciones del núcleo para un período.
 
     df: planilla completa ya cargada (ingest.cargar_ventas). Se filtra acá
@@ -310,7 +349,7 @@ def construir(df: pd.DataFrame, periodo: str, meses_tendencia: int = 4
             margenes_previos.append(m.resumen(previo)["margen_neto"])
 
     nombre, nombre_ant = nombre_periodo(periodo), nombre_periodo(ant_periodo)
-    return [
+    secciones = [
         seccion_resumen(r, r_ant, nombre, nombre_ant),
         seccion_kpis(r, r_ant),
         seccion_dimension(actual, cfg.PLATAFORMA, "core.plataformas",
@@ -322,3 +361,6 @@ def construir(df: pd.DataFrame, periodo: str, meses_tendencia: int = 4
         seccion_productos(actual),
         seccion_atencion(r, r_ant, margenes_previos),
     ]
+    if graficos:
+        _agregar_graficos(secciones, df, actual, periodo, r["margen_neto"])
+    return secciones

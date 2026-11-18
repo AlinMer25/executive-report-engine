@@ -42,7 +42,7 @@ def test_filtra_por_fecha_y_no_por_la_columna_mes():
     assert len(sc.filtrar_periodo(df, "2026-10")) == 1
 
 
-# ── Armado ────────────────────────────────────────────────────────────
+# ── Armado ──────────────────────────────────────────────────────────
 
 def test_arma_las_secciones_del_nucleo_en_orden(sinteticos):
     ids = [s.id for s in sc.construir(sinteticos, "2026-09")]
@@ -107,3 +107,24 @@ def test_alerta_por_tendencia_aunque_no_cruce_ningun_piso():
 def test_sin_tendencia_si_hubo_un_rebote():
     s = sc.seccion_atencion(_r(24.0), _r(24.5), [26.0, 24.0, 24.5])
     assert not any("Tendencia" in a for a in s.alertas)
+
+
+# ── Gráficos ────────────────────────────────────────────────────────────
+
+def test_serie_mensual_hasta_el_periodo(sinteticos):
+    serie = sc.serie_mensual(sinteticos, "2026-09", meses=6)
+    assert list(serie.index) == ["2026-04", "2026-05", "2026-06",
+                                 "2026-07", "2026-08", "2026-09"]
+
+
+def test_graficos_se_cuelgan_de_su_seccion(sinteticos):
+    secciones = {s.id: s for s in sc.construir(sinteticos, "2026-09")}
+    assert "evolucion" in secciones["core.kpis"].graficos
+    assert "margen" in secciones["core.plataformas"].graficos
+    png = secciones["core.kpis"].graficos["evolucion"]
+    assert png[:8] == b"\x89PNG\r\n\x1a\n"      # firma de todo archivo PNG
+
+
+def test_sin_graficos(sinteticos):
+    secciones = sc.construir(sinteticos, "2026-09", graficos=False)
+    assert all(not s.graficos for s in secciones)
