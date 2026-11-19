@@ -43,4 +43,46 @@ def test_modulo_no_entra_con_un_solo_subcanal(sinteticos):
 def test_el_modulo_va_antes_de_puntos_de_atencion(sinteticos):
     from src import sections as sc
     ids = [s.id for s in sc.construir(sinteticos, "2026-09", graficos=False)]
-    assert ids[-2:] == ["mod.graduacion", "core.atencion"]
+    assert ids[-1] == "core.atencion"                 # las alertas cierran
+    assert ids.index("mod.graduacion") > ids.index("core.productos")
+
+
+# ── mod.logistica ───────────────────────────────────────────────────────
+
+def test_logistica_detecta_la_fuga_y_ordena_por_costo(sinteticos):
+    s = md.mod_logistica(sinteticos, "2026-09")
+    if s is None:
+        pytest.skip("Los sintéticos de este mes no tienen fuga real.")
+    assert s.id == "mod.logistica"
+    assert any("ganancia no obtenida" in f for f in s.frases)
+
+
+def test_logistica_no_entra_sin_fuga(sinteticos):
+    """Si nadie pierde en flete, no hay fuga aunque el margen sea bajo."""
+    from src import metrics as m
+    sin_perdida = m.calcular(sinteticos)
+    sin_perdida[m.C_DIF_ENVIO] = 0.0
+    assert md.mod_logistica(sin_perdida, "2026-09") is None
+
+
+# ── mod.evolucion ───────────────────────────────────────────────────────
+
+def test_semanas_cubren_todo_el_mes(sinteticos):
+    t = md.semanas(sinteticos, "2026-09")
+    assert t["dias"].sum() == 30                     # septiembre tiene 30 días
+    assert t["operaciones"].sum() == len(
+        md.filtrar_periodo(sinteticos, "2026-09"))   # ninguna venta se pierde
+
+
+def test_evolucion_entra_con_semana_pico(sinteticos):
+    """Triplicar las ventas de la primera semana fuerza la dispersión."""
+    sept = md.filtrar_periodo(sinteticos, "2026-09")
+    dia = pd.to_datetime(sept[cfg.FECHA], dayfirst=True).dt.day
+    pico = pd.concat([sinteticos] + [sept[dia <= 7]] * 2)
+    s = md.mod_evolucion(pico, "2026-09")
+    assert s is not None and "S1 (1-7)" in s.frases[0]
+
+
+def test_evolucion_no_entra_si_el_mes_es_parejo(sinteticos, monkeypatch):
+    monkeypatch.setattr(md.cfg, "UMBRAL_DISPERSION_SEMANAL", 1000.0)
+    assert md.mod_evolucion(sinteticos, "2026-09") is None

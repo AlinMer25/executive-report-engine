@@ -127,14 +127,83 @@ def mod_logistica(df: pd.DataFrame, periodo: str) -> Seccion | None:
         frases.insert(0, f"Operando al margen del canal, las plataformas con fuga "
                          f"habrían generado {pesos(costo_total)} más de ganancia neta.")
     frases.append("[Completar: ¿el precio cubre el flete en estas plataformas?]")
-    return Seccion("mod.logistica", "Fuga logística", frases=frases, tablas=tablas)
+    return Seccion("mod.logistica", "Dónde se pierde margen", frases=frases, tablas=tablas)
+
+
+# ──────────────────────────────────────────────────────────────────────
+# mod.evolucion — evolución dentro del período
+# ──────────────────────────────────────────────────────────────────────
+
+# Semanas fijas del mes: 1-7, 8-14, 15-21 y 22 a fin de mes. La última tiene
+# entre 7 y 10 días, por eso se compara la facturación POR DÍA y no el total:
+# si no, la semana 4 "ganaría" siempre por tener más días.
+CORTES_SEMANA = [(1, 7), (8, 14), (15, 21), (22, 31)]
+
+
+def semanas(df: pd.DataFrame, periodo: str) -> pd.DataFrame:
+    """Resumen por semana del mes, con facturación diaria promedio."""
+    actual = filtrar_periodo(df, periodo)
+    if m.C_GANANCIA_NETA not in actual.columns:
+        actual = m.calcular(actual)
+    dia = pd.to_datetime(actual[cfg.FECHA], errors="coerce", dayfirst=True).dt.day
+    dias_del_mes = pd.Period(periodo, freq="M").days_in_month
+
+    filas = []
+    for n, (desde, hasta) in enumerate(CORTES_SEMANA, start=1):
+        hasta = min(hasta, dias_del_mes)
+        tramo = actual[(dia >= desde) & (dia <= hasta)]
+        dias = hasta - desde + 1
+        base = float(tramo[m.C_BASE].sum())
+        neta = float(tramo[m.C_GANANCIA_NETA].sum())
+        filas.append({
+            "semana": f"S{n} ({desde}-{hasta})",
+            "dias": dias,
+            "operaciones": len(tramo),
+            "facturacion": base,
+            "facturacion_diaria": base / dias,
+            "margen_neto": neta / base * 100 if base else 0.0,
+        })
+    return pd.DataFrame(filas)
+
+
+def mod_evolucion(df: pd.DataFrame, periodo: str) -> Seccion | None:
+    """Condición de entrada: la semana pico factura por día al menos 1,5 veces
+    lo que factura la semana valle (cfg.UMBRAL_DISPERSION_SEMANAL)."""
+    t = semanas(df, periodo)
+    diaria = t["facturacion_diaria"]
+    if t["operaciones"].sum() == 0 or diaria.min() <= 0:
+        return None
+    dispersion = float(diaria.max() / diaria.min())
+    if dispersion < cfg.UMBRAL_DISPERSION_SEMANAL:
+        return None
+
+    # argmax/argmin devuelven la POSICIÓN (un int), no la etiqueta del índice.
+    pico = fila(t, t.index[int(diaria.to_numpy().argmax())])
+    valle = fila(t, t.index[int(diaria.to_numpy().argmin())])
+    tabla = pd.DataFrame({
+        "Semana": t["semana"],
+        "Ventas": t["operaciones"],
+        "Facturación": [pesos(x) for x in t["facturacion"]],
+        "Facturación por día": [pesos(x) for x in t["facturacion_diaria"]],
+        "Margen neto": [porcentaje(x) for x in t["margen_neto"]],
+    })
+    veces = f"{dispersion:.1f}".replace(".", ",")
+    frases = [
+        f"La facturación no fue pareja en el mes: la semana {pico['semana']} "
+        f"facturó {pesos(pico['facturacion_diaria'])} por día, "
+        f"{veces} veces la semana {valle['semana']} "
+        f"({pesos(valle['facturacion_diaria'])} por día).",
+        "[Completar: qué pasó en la semana pico (evento, promoción, plataforma).]",
+    ]
+    return Seccion("mod.evolucion", "Evolución dentro del período",
+                   frases=frases, tablas={"semanas": tabla})
 
 
 # ──────────────────────────────────────────────────────────────────────
 # Registro: el orden de esta lista es el orden en el informe
 # ──────────────────────────────────────────────────────────────────────
 
-MODULOS = [mod_graduacion, mod_logistica]
+MODULOS = [mod_logistica, mod_evolucion, mod_graduacion]
 
 
 def activos(df: pd.DataFrame, periodo: str) -> list[Seccion]:
