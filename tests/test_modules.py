@@ -168,3 +168,60 @@ def test_sin_ventana_anterior_completa_lo_dice(sinteticos):
 def test_ventana_actual_incompleta_no_emite(sinteticos):
     """Anual a septiembre: faltan enero a marzo, mejor no mostrar nada."""
     assert md.mod_evolucion_larga(sinteticos, "2026-09", md.Parametros("anual")) is None
+
+
+# ── Módulos que activa el analista ──────────────────────────────────────
+
+def test_factor_sin_justificacion_se_rechaza():
+    with pytest.raises(ValueError, match="justificación"):
+        md.Parametros(factor="Hot Sale")
+
+
+def test_factor_declara_quien_y_por_que(sinteticos):
+    p = md.Parametros(factor="Hot Sale de mayo", autor="Marcos",
+                      factor_justificacion="Las ventas se duplicaron en 3 días")
+    s = md.mod_factor_del_mes(sinteticos, "2026-09", p)
+    assert s is not None
+    assert "activado por Marcos" in s.frases[1]
+
+
+def test_sin_declarar_los_cualitativos_no_entran(sinteticos):
+    p = md.Parametros()
+    assert md.mod_factor_del_mes(sinteticos, "2026-09", p) is None
+    assert md.mod_carga_siguiente(sinteticos, "2026-09", p) is None
+    assert md.mod_capacidad(sinteticos, "2026-09", p) is None
+
+
+def test_dotacion_cero_se_rechaza():
+    with pytest.raises(ValueError, match="dotación"):
+        md.Parametros(dotacion={"2026-09": 0})
+
+
+def test_capacidad_divide_por_operadores(sinteticos):
+    t = md.capacidad(sinteticos, ["2026-09"], {"2026-09": 2})
+    ventas = len(md.filtrar_periodo(sinteticos, "2026-09"))
+    assert t.iloc[0]["ventas_por_operador"] == ventas / 2
+
+
+def test_capacidad_avisa_si_falta_un_mes(sinteticos):
+    with pytest.raises(ValueError, match="2026-08"):
+        md.capacidad(sinteticos, ["2026-08", "2026-09"], {"2026-09": 3})
+
+
+def test_la_ventana_cambia_y_queda_escrita(sinteticos):
+    """Spec §3: elegir otro par de meses cambia la conclusión, así que se declara."""
+    dot: dict[str, float] = {"2026-07": 3, "2026-08": 2, "2026-09": 3}
+    defecto = md.mod_capacidad(sinteticos, "2026-09", md.Parametros(dotacion=dot))
+    otra = md.mod_capacidad(sinteticos, "2026-09", md.Parametros(
+        dotacion=dot, ventana_capacidad=("2026-07", "2026-09")))
+    assert defecto is not None and otra is not None
+    assert "2026-08 contra 2026-09" in defecto.frases[0]
+    assert "2026-07 contra 2026-09" in otra.frases[0]
+
+
+def test_carga_usa_la_capacidad_medida_como_referencia(sinteticos):
+    p = md.Parametros(carga="Ingresan 300 SKU nuevos", carga_justificacion="Alta de proveedor",
+                      dotacion={"2026-09": 3})
+    s = md.mod_carga_siguiente(sinteticos, "2026-09", p)
+    assert s is not None
+    assert any("Referencia" in f for f in s.frases)

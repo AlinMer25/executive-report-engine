@@ -8,7 +8,7 @@ Por eso cada función devuelve una Seccion o None.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 import pandas as pd
 
@@ -37,6 +37,19 @@ class Parametros:
     módulos.
     """
     corte: str = "trimestral"
+    autor: str = "el analista"
+
+    # Módulos cualitativos (spec §5.2): texto + justificación obligatoria.
+    factor: str | None = None
+    factor_justificacion: str | None = None
+    carga: str | None = None
+    carga_justificacion: str | None = None
+
+    # mod.capacidad: operadores por mes, p. ej. {"2026-08": 2, "2026-09": 3}.
+    # field(default_factory=dict): cada objeto recibe su propio dict vacío.
+    # Un "= {}" directo sería UN solo dict compartido por todos los objetos.
+    dotacion: dict[str, float] = field(default_factory=dict)
+    ventana_capacidad: tuple[str, str] | None = None   # None = últimos 2 meses
 
     def __post_init__(self):
         # __post_init__ corre justo después de crear el objeto: es el lugar
@@ -44,6 +57,14 @@ class Parametros:
         if self.corte not in CORTES:
             raise ValueError(f"corte_comparativo inválido: '{self.corte}'. "
                              f"Opciones: {', '.join(CORTES)}")
+        # Spec: un módulo cualitativo sin justificación es indistinguible
+        # de uno arbitrario. Se exige en el momento de declararlo.
+        if self.factor and not self.factor_justificacion:
+            raise ValueError("El factor del mes necesita justificación.")
+        if self.carga and not self.carga_justificacion:
+            raise ValueError("La carga del período siguiente necesita justificación.")
+        if any(v <= 0 for v in self.dotacion.values()):
+            raise ValueError("La dotación tiene que ser mayor que cero.")
 
 
 # ──────────────────────────────────────────────────────────────────────
@@ -404,11 +425,113 @@ def mod_evolucion_larga(df: pd.DataFrame, periodo: str,
 
 
 # ──────────────────────────────────────────────────────────────────────
+# Módulos que activa el analista (spec §5.2, nota sobre umbrales cualitativos)
+# ──────────────────────────────────────────────────────────────────────
+
+def miles(x: float) -> str:
+    """1234.6 → '1.235' (separador de miles argentino, sin decimales)."""
+    return f"{x:,.0f}".replace(",", ".")
+
+
+def _activado_por(params: Parametros, justificacion: str) -> str:
+    """La línea que el spec exige: quién lo activó y por qué."""
+    return f"Módulo activado por {params.autor}. Justificación: {justificacion}"
+
+
+def mod_factor_del_mes(df: pd.DataFrame, periodo: str,
+                       params: Parametros | None = None) -> Seccion | None:
+    """Condición de entrada: el analista declaró un factor (--factor)."""
+    if params is None or not params.factor:
+        return None
+    return Seccion("mod.factor_del_mes", "Factor del mes", frases=[
+        params.factor,
+        _activado_por(params, str(params.factor_justificacion)),
+        "[Completar: qué métricas del informe se leen distinto a la luz de este factor.]",
+    ])
+
+
+def capacidad(df: pd.DataFrame, meses: list[str],
+              dotacion: dict[str, float]) -> pd.DataFrame:
+    """Productividad por operador, mes a mes. Base: TOTAL del canal.
+
+    La base se declara porque en septiembre convivieron dos cifras para la
+    misma métrica (una sin Tecnología, otra con el total) sin aclararlo.
+    """
+    faltan = [mes for mes in meses if mes not in dotacion]
+    if faltan:
+        raise ValueError(f"Falta la dotación de: {', '.join(faltan)}")
+    filas = []
+    for mes in meses:
+        datos = filtrar_periodo(df, mes)
+        if datos.empty:
+            continue
+        r = m.resumen(datos)
+        n = dotacion[mes]
+        filas.append({"mes": mes, "operadores": n,
+                      "ventas_por_operador": r["operaciones"] / n,
+                      "ganancia_por_operador": r["ganancia_neta"] / n})
+    return pd.DataFrame(filas)
+
+
+def mod_capacidad(df: pd.DataFrame, periodo: str,
+                  params: Parametros | None = None) -> Seccion | None:
+    """Condición de entrada: el analista cargó la dotación (--dotacion).
+
+    Compara la ventana declarada (--ventana-capacidad) o, por defecto, el mes
+    anterior contra el actual. La ventana va escrita en el informe: elegir
+    otro par de meses cambia la conclusión (spec §3).
+    """
+    if params is None or not params.dotacion:
+        return None
+    desde, hasta = params.ventana_capacidad or (periodo_anterior(periodo), periodo)
+    t = capacidad(df, [desde, hasta], params.dotacion)
+    if len(t) < 2:
+        return None
+
+    a, b = fila(t, t.index[0]), fila(t, t.index[1])
+    var = (b["ventas_por_operador"] / a["ventas_por_operador"] - 1) * 100
+    tabla = pd.DataFrame({
+        "Mes": t["mes"],
+        "Operadores": [f"{x:g}" for x in t["operadores"]],
+        "Ventas por operador": [miles(x) for x in t["ventas_por_operador"]],
+        "Ganancia neta por operador": [pesos(x) for x in t["ganancia_por_operador"]],
+    })
+    variacion = f"{var:+.1f}%".replace(".", ",")
+    frases = [
+        f"Ventana declarada: {desde} contra {hasta}. Base: total del canal "
+        f"(incluye todas las categorías).",
+        f"Las ventas por operador pasaron de {miles(a['ventas_por_operador'])} "
+        f"a {miles(b['ventas_por_operador'])} ({variacion}).",
+        "[Completar: ¿el equipo rinde más o se está estirando?]",
+    ]
+    return Seccion("mod.capacidad", "Capacidad y productividad operativa",
+                   frases=frases, tablas={"capacidad": tabla})
+
+
+def mod_carga_siguiente(df: pd.DataFrame, periodo: str,
+                        params: Parametros | None = None) -> Seccion | None:
+    """Condición de entrada: el analista declaró una carga entrante (--carga)."""
+    if params is None or not params.carga:
+        return None
+    frases = [params.carga, _activado_por(params, str(params.carga_justificacion))]
+    if params.dotacion and periodo in params.dotacion:
+        t = capacidad(df, [periodo], params.dotacion)
+        if not t.empty:
+            ref = float(t["ventas_por_operador"].iloc[0])
+            frases.append(f"Referencia: la capacidad medida en {periodo} fue de "
+                          f"{miles(ref)} ventas por operador.")
+    frases.append("[Completar: qué se necesita para absorber la carga.]")
+    return Seccion("mod.carga_siguiente", "Carga de trabajo del período siguiente",
+                   frases=frases)
+
+
+# ──────────────────────────────────────────────────────────────────────
 # Registro: el orden de esta lista es el orden en el informe
 # ──────────────────────────────────────────────────────────────────────
 
-MODULOS = [mod_integridad, mod_logistica, mod_evolucion, mod_evolucion_larga,
-           mod_graduacion]
+# Orden de la tabla de módulos del spec (§5.2).
+MODULOS = [mod_integridad, mod_factor_del_mes, mod_logistica, mod_evolucion,
+           mod_capacidad, mod_evolucion_larga, mod_graduacion, mod_carga_siguiente]
 
 
 def activos(df: pd.DataFrame, periodo: str,

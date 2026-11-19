@@ -174,7 +174,8 @@ def escribir(secciones: list[sc.Seccion], periodo: str, ruta: Path,
 
 def generar(archivo, periodo: str, canal: str = "ambos",
             salida: Path | None = None, estricto: bool = False,
-            publicar: bool = False, corte: str = "trimestral") -> Path:
+            publicar: bool = False,
+            params: md.Parametros | None = None) -> Path:
     """De la planilla al .docx, en un solo paso.
 
     publicar=True congela los datos del mes en un snapshot: esa foto pasa a
@@ -190,7 +191,9 @@ def generar(archivo, periodo: str, canal: str = "ambos",
         raise SystemExit(f"Modo estricto: hay hallazgos de severidad alta ({altas}). "
                          "Corregí la planilla o generá sin --estricto.")
 
-    secciones = sc.construir(df, periodo, corte=corte)
+    params = params or md.Parametros()
+    corte = params.corte
+    secciones = sc.construir(df, periodo, params=params)
     reexp = None
     if canal == "ambos":
         reexp = md.reexpresiones(df, periodo)
@@ -214,6 +217,25 @@ def generar(archivo, periodo: str, canal: str = "ambos",
 # Línea de comandos
 # ──────────────────────────────────────────────────────────────────────
 
+def leer_dotacion(texto: str | None) -> dict[str, float]:
+    """'2026-08=2,2026-09=3' → {'2026-08': 2.0, '2026-09': 3.0}"""
+    if not texto:
+        return {}
+    dotacion = {}
+    for par in texto.split(","):
+        mes, n = par.split("=")
+        dotacion[mes.strip()] = float(n)
+    return dotacion
+
+
+def leer_ventana(texto: str | None) -> tuple[str, str] | None:
+    """'2026-07,2026-09' → ('2026-07', '2026-09')"""
+    if not texto:
+        return None
+    desde, hasta = (x.strip() for x in texto.split(","))
+    return desde, hasta
+
+
 def main() -> None:
     p = argparse.ArgumentParser(description="Genera el informe ejecutivo de ventas.")
     p.add_argument("--archivo", required=True, help="Planilla .xlsx de ventas")
@@ -224,12 +246,27 @@ def main() -> None:
                    help="No generar si hay hallazgos de severidad alta")
     p.add_argument("--corte", default="trimestral", choices=list(md.CORTES),
                    help="Corte comparativo de la analítica larga (spec §3)")
+    p.add_argument("--autor", default="el analista",
+                   help="Quién activa los módulos cualitativos")
+    p.add_argument("--factor", help="Factor del mes (evento exógeno)")
+    p.add_argument("--factor-justificacion")
+    p.add_argument("--carga", help="Carga de trabajo prevista para el período siguiente")
+    p.add_argument("--carga-justificacion")
+    p.add_argument("--dotacion", help='Operadores por mes: "2026-08=2,2026-09=3"')
+    p.add_argument("--ventana-capacidad", help='Par de meses: "2026-07,2026-09"')
     p.add_argument("--publicar", action="store_true",
                    help="Congelar los datos del mes como versión publicada")
     a = p.parse_args()
 
+    params = md.Parametros(
+        corte=a.corte, autor=a.autor,
+        factor=a.factor, factor_justificacion=a.factor_justificacion,
+        carga=a.carga, carga_justificacion=a.carga_justificacion,
+        dotacion=leer_dotacion(a.dotacion),
+        ventana_capacidad=leer_ventana(a.ventana_capacidad),
+    )
     ruta = generar(a.archivo, a.mes, a.canal, estricto=a.estricto,
-                   publicar=a.publicar, corte=a.corte)
+                   publicar=a.publicar, params=params)
     print(f"Informe generado: {ruta}")
 
 

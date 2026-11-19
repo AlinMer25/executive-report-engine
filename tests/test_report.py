@@ -59,3 +59,9 @@ def test_publicar_congela_el_mes(planilla, tmp_path):
     versiones = snap.listar("2026-09")
     assert len(versiones) == 1
     assert versiones.iloc[0]["etiqueta"] == "informe publicado"
+
+
+def test_leer_parametros_de_la_terminal():
+    assert report.leer_dotacion("2026-08=2, 2026-09=3") == {"2026-08": 2.0, "2026-09": 3.0}
+    assert report.leer_dotacion(None) == {}
+    assert report.leer_ventana("2026-07,2026-09") == ("2026-07", "2026-09")
