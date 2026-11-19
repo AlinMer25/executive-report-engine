@@ -116,5 +116,8 @@ def snapshots_aislados(tmp_path, monkeypatch):
     leer los snapshots reales de data/snapshots/ (con datos de la empresa)
     y su resultado dependería de qué haya en tu disco.
     """
+    from src import config as cfg
     from src import snapshot as snap
     monkeypatch.setattr(snap, "DIR_SNAPSHOTS", tmp_path / "snapshots_aislados")
+    # Lo mismo con las recomendaciones: nunca leer las tuyas reales.
+    monkeypatch.setattr(cfg, "DIR_RECOMENDACIONES", tmp_path / "recomendaciones")
