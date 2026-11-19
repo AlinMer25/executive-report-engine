@@ -42,10 +42,12 @@ def test_filtra_por_fecha_y_no_por_la_columna_mes():
     assert len(sc.filtrar_periodo(df, "2026-10")) == 1
 
 
-# ── Armado ──────────────────────────────────────────────────────────
+# ── Armado ────────────────────────────────────────────────────────────
 
 def test_arma_las_secciones_del_nucleo_en_orden(sinteticos):
-    ids = [s.id for s in sc.construir(sinteticos, "2026-09")]
+    # Solo el núcleo: los módulos opcionales (mod.*) tienen sus propios tests.
+    ids = [s.id for s in sc.construir(sinteticos, "2026-09", graficos=False)
+           if s.id.startswith("core.")]
     assert ids == ["core.resumen", "core.kpis", "core.plataformas",
                    "core.categorias", "core.proveedores", "core.productos",
                    "core.atencion"]

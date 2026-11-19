@@ -359,8 +359,11 @@ def construir(df: pd.DataFrame, periodo: str, meses_tendencia: int = 4,
         seccion_dimension(actual, cfg.PROVEEDOR, "core.proveedores",
                           "Rendimiento por proveedor", "Proveedor"),
         seccion_productos(actual),
-        seccion_atencion(r, r_ant, margenes_previos),
     ]
+    # Módulos opcionales: entran solo si se cumple su condición (spec §6).
+    from . import modules                   # import local: evita import circular
+    secciones += modules.activos(df, periodo)
+    secciones.append(seccion_atencion(r, r_ant, margenes_previos))
     if graficos:
         _agregar_graficos(secciones, df, actual, periodo, r["margen_neto"])
     return secciones
