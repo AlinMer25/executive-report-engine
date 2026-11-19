@@ -24,6 +24,7 @@ RAIZ = Path(__file__).parent.parent
 DIR_CRUDO = RAIZ / "data" / "raw"       # datos reales — nunca se commitean
 DIR_MUESTRA = RAIZ / "data" / "sample"  # dataset sintético — sí se commitea
 DIR_SALIDA = RAIZ / "output"            # informes generados — no se commitean
+DIR_RECOMENDACIONES = RAIZ / "data" / "recomendaciones"  # tus recomendaciones — no se commitean
 
 HOJA_VENTAS = "Ventas26"
 HOJA_COSTOS = "Costos"

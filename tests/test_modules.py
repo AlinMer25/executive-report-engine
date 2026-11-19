@@ -43,7 +43,7 @@ def test_modulo_no_entra_con_un_solo_subcanal(sinteticos):
 def test_el_modulo_va_antes_de_puntos_de_atencion(sinteticos):
     from src import sections as sc
     ids = [s.id for s in sc.construir(sinteticos, "2026-09", graficos=False)]
-    assert ids[-1] == "core.atencion"                 # las alertas cierran
+    assert ids[-2:] == ["core.atencion", "core.recomendaciones"]
     assert ids.index("mod.graduacion") > ids.index("core.productos")
 
 

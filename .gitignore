@@ -3,6 +3,7 @@ data/raw/
 data/snapshots/
 output/
 config/pseudonyms_private.json
+data/recomendaciones/
 
 # Planillas: bloqueo por extensión, no por carpeta.
 # Un archivo mal ubicado no debe poder entrar por descuido.

@@ -50,7 +50,7 @@ def test_arma_las_secciones_del_nucleo_en_orden(sinteticos):
            if s.id.startswith("core.")]
     assert ids == ["core.resumen", "core.kpis", "core.plataformas",
                    "core.categorias", "core.proveedores", "core.productos",
-                   "core.atencion"]
+                   "core.seguimiento", "core.atencion", "core.recomendaciones"]
 
 
 def test_el_resumen_usa_los_numeros_del_periodo(sinteticos):
