@@ -121,3 +121,6 @@ def snapshots_aislados(tmp_path, monkeypatch):
     monkeypatch.setattr(snap, "DIR_SNAPSHOTS", tmp_path / "snapshots_aislados")
     # Lo mismo con las recomendaciones: nunca leer las tuyas reales.
     monkeypatch.setattr(cfg, "DIR_RECOMENDACIONES", tmp_path / "recomendaciones")
+    # Y con el mapa de pseudónimos: es la llave que revierte la anonimización.
+    from src import anonymize as an
+    monkeypatch.setattr(an, "RUTA_PSEUDONIMOS", tmp_path / "pseudonimos.json")

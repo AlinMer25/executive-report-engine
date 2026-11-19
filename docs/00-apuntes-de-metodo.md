@@ -365,6 +365,46 @@ confidencial que puede filtrarse o subirse por error.
 **Cómo se traslada.** Minimizar las copias de datos sensibles es parte del
 diseño, no un detalle.
 
+### 7.3 Un estado global se prende y se apaga con `with`
+
+**Qué.** El modo público cambia cómo escribe `pesos()` mientras dura un bloque
+`with sc.publicacion(base):`. Al salir del bloque se apaga solo, incluso si
+algo falló adentro (`try / finally`).
+
+**Por qué.** Si el modo se prendiera con una variable suelta y el programa
+fallara a mitad de camino, lo próximo que se generara saldría en el modo
+equivocado. El `with` hace imposible olvidarse de apagarlo.
+
+**Cómo se traslada.** Todo lo que se abre y se tiene que cerrar (archivos,
+conexiones, modos) va en un `with`.
+
+### 7.4 Valores por defecto mutables: `field(default_factory=dict)`
+
+**Qué.** En una dataclass, `dotacion: dict = {}` crea UN diccionario que
+comparten todos los objetos. `field(default_factory=dict)` crea uno nuevo
+para cada objeto.
+
+**Por qué.** Con el `{}` directo, cargar la dotación de un informe la haría
+aparecer en todos los demás. Es una de las trampas más clásicas de Python.
+
+**Cómo se traslada.** Listas y diccionarios como valor por defecto, siempre
+con `default_factory` (o `None` y crearlos adentro de la función).
+
+### 7.5 Verificar el producto final, no la intención
+
+**Qué.** En modo público, después de escribir el .docx el motor lo vuelve a
+abrir, busca montos en pesos y nombres reales de proveedores, y si encuentra
+uno borra el archivo y falla.
+
+**Por qué.** Que cada función "debería" anonimizar no garantiza nada: un
+nombre real puede colarse por un texto libre (tus recomendaciones). Revisar
+el archivo terminado es la única garantía.
+
+**Cómo se traslada.** Los controles importantes miran el resultado que sale
+por la puerta, no los pasos que se supone que lo produjeron. Y un test atrapó
+un bug en el propio formato (`143,2 u,` en vez de `143,2 u.`): el `replace`
+de separadores se comía el punto de la unidad.
+
 ---
 
 *Marcos Olmedo Wasmuth — executive-report-engine*

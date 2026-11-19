@@ -18,6 +18,7 @@ Referencia: docs/02-spec-del-modelo.md, secciones 5 y 6.
 
 from __future__ import annotations
 
+from contextlib import contextmanager
 from dataclasses import dataclass, field
 
 import pandas as pd
@@ -62,8 +63,46 @@ class Seccion:
 # Formato argentino para las frases
 # ──────────────────────────────────────────────────────────────────────
 
+# Modo público (spec §3, modo_publicacion): cuando _UNIDAD tiene un valor,
+# pesos() deja de escribir pesos y escribe "unidades base": 1 u. = 1% de la
+# facturación del mes base. Las proporciones se conservan; la magnitud no.
+_UNIDAD: float | None = None
+
+
+@contextmanager
+def publicacion(facturacion_base: float):
+    """Activa el modo público mientras dura el bloque `with`.
+
+    Un context manager garantiza que el modo se apague al salir, incluso si
+    algo falla adentro. Sin él, un error a mitad de camino dejaría el modo
+    público prendido para lo que se genere después.
+    """
+    global _UNIDAD
+    if facturacion_base <= 0:
+        raise ValueError("La facturación del mes base tiene que ser positiva.")
+    _UNIDAD = facturacion_base / 100
+    try:
+        yield
+    finally:
+        _UNIDAD = None
+
+
+def unidades(x: float) -> str:
+    """Un monto expresado en unidades base: 143,2 u. · 0,32 u."""
+    assert _UNIDAD is not None
+    u = x / _UNIDAD
+    decimales = 1 if abs(u) >= 100 else 2 if abs(u) >= 1 else 3
+    numero = f"{u:,.{decimales}f}".replace(",", "X").replace(".", ",").replace("X", ".")
+    return f"{numero} u."      # la unidad va después: el replace no la toca
+
+
 def pesos(x: float) -> str:
-    """$317,5 M para millones; $424.437 para el resto."""
+    """$317,5 M para millones; $424.437 para el resto.
+
+    En modo público devuelve unidades base (ver publicacion()).
+    """
+    if _UNIDAD is not None:
+        return unidades(x)
     if abs(x) >= 1_000_000:
         return f"${x / 1_000_000:,.1f} M".replace(",", "X").replace(".", ",").replace("X", ".")
     return f"${x:,.0f}".replace(",", ".")

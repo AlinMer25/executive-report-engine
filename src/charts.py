@@ -47,6 +47,10 @@ def _a_png(fig) -> bytes:
 
 
 def _millones(x: float, _pos=None) -> str:
+    """Etiqueta de eje: $300 M, o unidades base en modo público."""
+    from . import sections as sc            # lee el modo vigente
+    if sc._UNIDAD is not None:
+        return f"{x / sc._UNIDAD:,.0f} u.".replace(",", ".")
     return f"${x / 1e6:,.0f} M".replace(",", ".")
 
 

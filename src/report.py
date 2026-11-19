@@ -14,6 +14,7 @@ El informe queda en output/, que está en .gitignore porque tiene datos reales.
 from __future__ import annotations
 
 import argparse
+import contextlib
 from datetime import date
 from io import BytesIO
 from pathlib import Path
@@ -29,6 +30,7 @@ from docx.styles.style import ParagraphStyle
 
 from . import config as cfg
 from . import modules as md
+from . import publico as pub
 from . import sections as sc
 from . import snapshot as snap
 from . import validate as val
@@ -101,7 +103,7 @@ def _alerta(doc, texto: str) -> None:
 def escribir(secciones: list[sc.Seccion], periodo: str, ruta: Path,
              filas_analizadas: int, hallazgos: list,
              reexp: pd.DataFrame | None = None,
-             corte: str = "trimestral") -> Path:
+             corte: str = "trimestral", publico: bool = False) -> Path:
     """Arma el .docx a partir de las secciones."""
     doc = Document()
     estilo = cast(ParagraphStyle, doc.styles["Normal"])   # le aclara el tipo a Pylance
@@ -145,6 +147,11 @@ def escribir(secciones: list[sc.Seccion], periodo: str, ruta: Path,
             "recalculados por el motor desde sus insumos. El margen del período "
             "es ponderado por facturación. Los márgenes varían en puntos "
             f"porcentuales (pp). Corte comparativo declarado: {corte}.")
+    if publico:
+        nota += (f" Versión pública: los montos se expresan en unidades base "
+                 f"(1 u. = 1% de la facturación de {sc.nombre_periodo(cfg.MES_BASE_INDICE)}) "
+                 f"y los proveedores con pseudónimo. Márgenes, variaciones y "
+                 f"participaciones son reales.")
     doc.add_paragraph(nota)
 
     # Spec §7, regla 2: toda reexpresión se declara, aunque sea chica.
@@ -175,7 +182,7 @@ def escribir(secciones: list[sc.Seccion], periodo: str, ruta: Path,
 def generar(archivo, periodo: str, canal: str = "ambos",
             salida: Path | None = None, estricto: bool = False,
             publicar: bool = False,
-            params: md.Parametros | None = None) -> Path:
+            params: md.Parametros | None = None, modo: str = "interno") -> Path:
     """De la planilla al .docx, en un solo paso.
 
     publicar=True congela los datos del mes en un snapshot: esa foto pasa a
@@ -193,23 +200,48 @@ def generar(archivo, periodo: str, canal: str = "ambos",
 
     params = params or md.Parametros()
     corte = params.corte
-    secciones = sc.construir(df, periodo, params=params)
-    reexp = None
-    if canal == "ambos":
-        reexp = md.reexpresiones(df, periodo)
-    else:
-        # Los snapshots publicados son del total: comparar contra un solo
-        # sub-canal daría diferencias falsas.
-        secciones = [s for s in secciones if s.id != "mod.integridad"]
+    publico = modo == "publico"
+    if publico and publicar:
+        raise SystemExit("--publicar congela la versión interna: no se combina con "
+                         "--modo publico.")
 
-    salida = salida or cfg.DIR_SALIDA / f"Informe_Ventas_{periodo}_{corte}_{canal}.docx"
-    ruta = escribir(secciones, periodo, salida, len(del_periodo), hallazgos, reexp,
-                    corte)
+    mapa: dict[str, str] = {}
+    contexto = contextlib.nullcontext()          # "no hacer nada" por defecto
+    if publico:
+        df, mapa = pub.preparar(df)
+        contexto = sc.publicacion(pub.facturacion_base(df))
 
-    # A2: el Resumen y QA sale de las MISMAS secciones (invariante I2).
-    from . import qa                        # import local: qa importa report
-    resumen_qa = qa.construir(df, periodo, secciones, params)
-    qa.escribir(resumen_qa, salida.parent / f"Resumen_QA_{periodo}_{corte}_{canal}.docx")
+    sufijo = "_publico" if publico else ""
+    salida = salida or cfg.DIR_SALIDA / f"Informe_Ventas_{periodo}_{corte}_{canal}{sufijo}.docx"
+    ruta_qa = salida.parent / f"Resumen_QA_{periodo}_{corte}_{canal}{sufijo}.docx"
+
+    # Todo lo que formatea montos pasa adentro del with: en modo público,
+    # pesos() escribe unidades base mientras dura el bloque.
+    with contexto:
+        secciones = sc.construir(df, periodo, params=params)
+        reexp = None
+        if canal == "ambos":
+            reexp = md.reexpresiones(df, periodo)
+        else:
+            # Los snapshots publicados son del total: comparar contra un solo
+            # sub-canal daría diferencias falsas.
+            secciones = [s for s in secciones if s.id != "mod.integridad"]
+        if publico:
+            pub.limpiar_secciones(secciones, mapa)
+
+        ruta = escribir(secciones, periodo, salida, len(del_periodo), hallazgos,
+                        reexp, corte, publico)
+
+        # A2: el Resumen y QA sale de las MISMAS secciones (invariante I2).
+        from . import qa                    # import local: qa importa report
+        resumen_qa = qa.construir(df, periodo, secciones, params)
+        if publico:
+            pub.limpiar_qa(resumen_qa, mapa)
+        qa.escribir(resumen_qa, ruta_qa)
+
+    if publico:                             # invariante I1, sobre el archivo final
+        pub.verificar_docx(ruta, mapa)
+        pub.verificar_docx(ruta_qa, mapa)
 
     if publicar:
         if canal != "ambos":
@@ -259,6 +291,8 @@ def main() -> None:
     p.add_argument("--carga-justificacion")
     p.add_argument("--dotacion", help='Operadores por mes: "2026-08=2,2026-09=3"')
     p.add_argument("--ventana-capacidad", help='Par de meses: "2026-07,2026-09"')
+    p.add_argument("--modo", default="interno", choices=["interno", "publico"],
+                   help="publico: unidades base y pseudónimos, verificado (spec §3)")
     p.add_argument("--publicar", action="store_true",
                    help="Congelar los datos del mes como versión publicada")
     a = p.parse_args()
@@ -271,7 +305,7 @@ def main() -> None:
         ventana_capacidad=leer_ventana(a.ventana_capacidad),
     )
     ruta = generar(a.archivo, a.mes, a.canal, estricto=a.estricto,
-                   publicar=a.publicar, params=params)
+                   publicar=a.publicar, params=params, modo=a.modo)
     print(f"Informe generado: {ruta}")
 
 

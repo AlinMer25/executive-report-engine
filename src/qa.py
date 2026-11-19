@@ -57,6 +57,7 @@ class ResumenQA:
     cierre: str
     corte: str = "trimestral"
     avisos: list[str] = field(default_factory=list)
+    publico: bool = False
 
 
 # ──────────────────────────────────────────────────────────────────────
@@ -302,8 +303,9 @@ def escribir(qa: ResumenQA, ruta: Path) -> Path:
     t = doc.add_paragraph().add_run(
         f"RESUMEN EJECUTIVO — VENTAS {nombre_periodo(qa.periodo).upper()}")
     t.font.size, t.font.bold, t.font.color.rgb = Pt(18), True, rp.VERDE
+    version = " · versión pública: montos en unidades base" if qa.publico else ""
     meta = doc.add_paragraph().add_run(
-        f"Canal Verde · corte {qa.corte} · generado el {date.today():%d/%m/%Y}")
+        f"Canal Verde · corte {qa.corte} · generado el {date.today():%d/%m/%Y}{version}")
     meta.font.size, meta.font.italic = Pt(9), True
 
     rp._alerta(doc, f"El titular del mes. {qa.titular}")
