@@ -8,6 +8,8 @@ Por eso cada función devuelve una Seccion o None.
 
 from __future__ import annotations
 
+from dataclasses import dataclass
+
 import pandas as pd
 
 from . import config as cfg
@@ -15,6 +17,33 @@ from . import metrics as m
 from . import snapshot as snap
 from .sections import (Seccion, fila, filtrar_periodo, periodo_anterior, pesos,
                        porcentaje, pp)
+
+
+# ──────────────────────────────────────────────────────────────────────
+# Parámetros de ejecución que leen los módulos
+# ──────────────────────────────────────────────────────────────────────
+
+# Cuántos meses abarca cada corte (spec §3).
+CORTES = {"mensual": 1, "bimestral": 2, "trimestral": 3,
+          "cuatrimestral": 4, "semestral": 6, "anual": 12}
+
+
+@dataclass
+class Parametros:
+    """Lo que el analista declara al generar el informe (spec §3).
+
+    Se pasa entero a cada módulo: cada uno lee solo lo que le importa. Así,
+    sumar un parámetro nuevo no obliga a cambiar la firma de todos los
+    módulos.
+    """
+    corte: str = "trimestral"
+
+    def __post_init__(self):
+        # __post_init__ corre justo después de crear el objeto: es el lugar
+        # para rechazar un valor inválido antes de que llegue a un cálculo.
+        if self.corte not in CORTES:
+            raise ValueError(f"corte_comparativo inválido: '{self.corte}'. "
+                             f"Opciones: {', '.join(CORTES)}")
 
 
 # ──────────────────────────────────────────────────────────────────────
@@ -39,7 +68,8 @@ def productos_graduados(df: pd.DataFrame, periodo: str) -> list[str]:
     return sorted(str(p) for p in (stock_ahora & verde_antes) - stock_antes)
 
 
-def mod_graduacion(df: pd.DataFrame, periodo: str) -> Seccion | None:
+def mod_graduacion(df: pd.DataFrame, periodo: str,
+             params: Parametros | None = None) -> Seccion | None:
     """Condición de entrada: hay ventas de los dos sub-canales en el período."""
     actual = filtrar_periodo(df, periodo)
     canales = set(actual[cfg.CANAL].dropna())
@@ -85,7 +115,8 @@ def mod_graduacion(df: pd.DataFrame, periodo: str) -> Seccion | None:
 # mod.logistica — fuga logística real
 # ──────────────────────────────────────────────────────────────────────
 
-def mod_logistica(df: pd.DataFrame, periodo: str) -> Seccion | None:
+def mod_logistica(df: pd.DataFrame, periodo: str,
+             params: Parametros | None = None) -> Seccion | None:
     """Condición de entrada: al menos una plataforma o método de envío con
     fuga real (balance de envíos < 0, margen ≥ 1 pp debajo del canal y
     participación ≥ 1%). Ordenado por costo en pesos, no por balance.
@@ -168,7 +199,8 @@ def semanas(df: pd.DataFrame, periodo: str) -> pd.DataFrame:
     return pd.DataFrame(filas)
 
 
-def mod_evolucion(df: pd.DataFrame, periodo: str) -> Seccion | None:
+def mod_evolucion(df: pd.DataFrame, periodo: str,
+             params: Parametros | None = None) -> Seccion | None:
     """Condición de entrada: la semana pico factura por día al menos 1,5 veces
     lo que factura la semana valle (cfg.UMBRAL_DISPERSION_SEMANAL)."""
     t = semanas(df, periodo)
@@ -256,7 +288,8 @@ def valor_cabecera(metrica: str, x: float) -> str:
     return f"{x:,.0f}".replace(",", ".")
 
 
-def mod_integridad(df: pd.DataFrame, periodo: str) -> Seccion | None:
+def mod_integridad(df: pd.DataFrame, periodo: str,
+             params: Parametros | None = None) -> Seccion | None:
     """Condición de entrada: algún mes publicado cambió ≥ 5% en una métrica
     de cabecera. Los cambios menores van solo a la nota metodológica."""
     r = reexpresiones(df, periodo)
@@ -285,17 +318,105 @@ def mod_integridad(df: pd.DataFrame, periodo: str) -> Seccion | None:
 
 
 # ──────────────────────────────────────────────────────────────────────
+# mod.evolucion_larga — analítica del corte largo
+# ──────────────────────────────────────────────────────────────────────
+
+ABREV = ["", "ene", "feb", "mar", "abr", "may", "jun",
+         "jul", "ago", "sep", "oct", "nov", "dic"]
+
+
+def ventana(periodo: str, meses: int) -> list[str]:
+    """Los `meses` meses que terminan en `periodo`, del más viejo al más nuevo."""
+    return [periodo_anterior(periodo, k) for k in range(meses - 1, -1, -1)]
+
+
+def nombre_ventana(meses: list[str]) -> str:
+    """['2026-07', '2026-08', '2026-09'] → 'jul–sep 2026'."""
+    a, b = pd.Period(meses[0], freq="M"), pd.Period(meses[-1], freq="M")
+    if a.year == b.year:
+        return f"{ABREV[a.month]}–{ABREV[b.month]} {b.year}"
+    return f"{ABREV[a.month]} {a.year}–{ABREV[b.month]} {b.year}"
+
+
+def _resumen_meses(df: pd.DataFrame, meses: list[str]) -> dict | None:
+    """Resumen de varios meses juntos; None si falta alguno (comparar una
+    ventana incompleta contra una completa sería engañoso)."""
+    partes = [filtrar_periodo(df, mes) for mes in meses]
+    if any(p.empty for p in partes):
+        return None
+    return m.resumen(pd.concat(partes))
+
+
+def mod_evolucion_larga(df: pd.DataFrame, periodo: str,
+                        params: Parametros | None = None) -> Seccion | None:
+    """Condición de entrada: corte_comparativo distinto de 'mensual'."""
+    params = params or Parametros()
+    n = CORTES[params.corte]
+    if n == 1:
+        return None
+
+    meses = ventana(periodo, n)
+    actual = _resumen_meses(df, meses)
+    if actual is None:
+        return None                     # no hay datos para la ventana completa
+
+    filas = []
+    for mes in meses:
+        r = m.resumen(filtrar_periodo(df, mes))
+        filas.append({"Mes": mes, **r})
+    filas.append({"Mes": f"Total {nombre_ventana(meses)}", **actual})
+    t = pd.DataFrame(filas)
+
+    tabla = pd.DataFrame({
+        "Mes": t["Mes"],
+        "Ventas": t["operaciones"].astype(int),
+        "Facturación": [pesos(x) for x in t["facturacion"]],
+        "Ticket promedio": [pesos(x) for x in t["ticket_promedio"]],
+        "Ganancia neta": [pesos(x) for x in t["ganancia_neta"]],
+        "Margen neto": [porcentaje(x) for x in t["margen_neto"]],
+    })
+
+    nombre = nombre_ventana(meses)
+    previos = ventana(periodo_anterior(periodo, n), n)
+    anterior = _resumen_meses(df, previos)
+
+    if anterior is None:
+        frases = [
+            f"El período {nombre} ({params.corte}) facturó "
+            f"{pesos(actual['facturacion'])} con margen neto de "
+            f"{porcentaje(actual['margen_neto'])}. No hay datos completos de "
+            f"{nombre_ventana(previos)} para comparar.",
+        ]
+    else:
+        var = (actual["facturacion"] / anterior["facturacion"] - 1) * 100
+        dif = actual["margen_neto"] - anterior["margen_neto"]
+        frases = [
+            f"El período {nombre} ({params.corte}) facturó "
+            f"{pesos(actual['facturacion'])}, "
+            f"{f'{var:+.1f}%'.replace('.', ',')} contra {nombre_ventana(previos)}. "
+            f"El margen neto fue {porcentaje(actual['margen_neto'])} ({pp(dif)}) y "
+            f"la ganancia neta, {pesos(actual['ganancia_neta'])}.",
+        ]
+    frases.append("[Completar: tendencia del período y qué la explica.]")
+
+    return Seccion("mod.evolucion_larga", f"Analítica {params.corte} ({nombre})",
+                   frases=frases, tablas={"evolucion_larga": tabla})
+
+
+# ──────────────────────────────────────────────────────────────────────
 # Registro: el orden de esta lista es el orden en el informe
 # ──────────────────────────────────────────────────────────────────────
 
-MODULOS = [mod_integridad, mod_logistica, mod_evolucion, mod_graduacion]
+MODULOS = [mod_integridad, mod_logistica, mod_evolucion, mod_evolucion_larga,
+           mod_graduacion]
 
 
-def activos(df: pd.DataFrame, periodo: str) -> list[Seccion]:
+def activos(df: pd.DataFrame, periodo: str,
+            params: Parametros | None = None) -> list[Seccion]:
     """Corre todos los módulos y devuelve solo los que cumplieron su condición."""
     resultado = []
     for modulo in MODULOS:
-        s = modulo(df, periodo)
+        s = modulo(df, periodo, params or Parametros())
         if s is not None:
             resultado.append(s)
     return resultado

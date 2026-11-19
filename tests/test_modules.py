@@ -123,3 +123,48 @@ def test_cambio_chico_va_solo_a_metodologia(sinteticos):
     hoy = pd.concat([sinteticos, agosto.head(3)])
     assert not md.reexpresiones(hoy, "2026-09").empty
     assert md.mod_integridad(hoy, "2026-09") is None
+
+
+# ── Parámetros y mod.evolucion_larga ────────────────────────────────────
+
+def test_corte_invalido_se_rechaza_al_crear():
+    with pytest.raises(ValueError, match="corte_comparativo"):
+        md.Parametros(corte="quincenal")
+
+
+@pytest.mark.parametrize("corte, meses", [
+    ("bimestral", ["2026-08", "2026-09"]),
+    ("trimestral", ["2026-07", "2026-08", "2026-09"]),
+])
+def test_ventana_termina_en_el_periodo(corte, meses):
+    assert md.ventana("2026-09", md.CORTES[corte]) == meses
+
+
+def test_nombre_de_ventana():
+    assert md.nombre_ventana(["2026-07", "2026-08", "2026-09"]) == "jul–sep 2026"
+    assert md.nombre_ventana(["2026-11", "2026-12", "2027-01"]) == "nov 2026–ene 2027"
+
+
+def test_mensual_no_emite_analitica_larga(sinteticos):
+    p = md.Parametros(corte="mensual")
+    assert md.mod_evolucion_larga(sinteticos, "2026-09", p) is None
+
+
+def test_trimestral_compara_contra_el_trimestre_anterior(sinteticos):
+    s = md.mod_evolucion_larga(sinteticos, "2026-09", md.Parametros("trimestral"))
+    assert s is not None
+    assert "jul–sep 2026" in s.titulo
+    assert "contra abr–jun 2026" in s.frases[0]
+    assert len(s.tablas["evolucion_larga"]) == 4      # 3 meses + total
+
+
+def test_sin_ventana_anterior_completa_lo_dice(sinteticos):
+    """Semestral a septiembre: no hay datos de oct 2025–mar 2026."""
+    s = md.mod_evolucion_larga(sinteticos, "2026-09", md.Parametros("semestral"))
+    assert s is not None
+    assert "No hay datos completos" in s.frases[0]
+
+
+def test_ventana_actual_incompleta_no_emite(sinteticos):
+    """Anual a septiembre: faltan enero a marzo, mejor no mostrar nada."""
+    assert md.mod_evolucion_larga(sinteticos, "2026-09", md.Parametros("anual")) is None

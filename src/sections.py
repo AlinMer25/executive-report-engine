@@ -322,7 +322,7 @@ def _agregar_graficos(secciones: list[Seccion], df: pd.DataFrame,
 
 
 def construir(df: pd.DataFrame, periodo: str, meses_tendencia: int = 4,
-              graficos: bool = True) -> list[Seccion]:
+              graficos: bool = True, corte: str = "trimestral") -> list[Seccion]:
     """Arma las secciones del núcleo para un período.
 
     df: planilla completa ya cargada (ingest.cargar_ventas). Se filtra acá
@@ -362,7 +362,7 @@ def construir(df: pd.DataFrame, periodo: str, meses_tendencia: int = 4,
     ]
     # Módulos opcionales: entran solo si se cumple su condición (spec §6).
     from . import modules                   # import local: evita import circular
-    secciones += modules.activos(df, periodo)
+    secciones += modules.activos(df, periodo, modules.Parametros(corte=corte))
     secciones.append(seccion_atencion(r, r_ant, margenes_previos))
     if graficos:
         _agregar_graficos(secciones, df, actual, periodo, r["margen_neto"])

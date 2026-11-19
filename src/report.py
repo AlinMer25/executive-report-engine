@@ -100,7 +100,8 @@ def _alerta(doc, texto: str) -> None:
 
 def escribir(secciones: list[sc.Seccion], periodo: str, ruta: Path,
              filas_analizadas: int, hallazgos: list,
-             reexp: pd.DataFrame | None = None) -> Path:
+             reexp: pd.DataFrame | None = None,
+             corte: str = "trimestral") -> Path:
     """Arma el .docx a partir de las secciones."""
     doc = Document()
     estilo = cast(ParagraphStyle, doc.styles["Normal"])   # le aclara el tipo a Pylance
@@ -119,6 +120,7 @@ def escribir(secciones: list[sc.Seccion], periodo: str, ruta: Path,
     meta = doc.add_paragraph()
     r = meta.add_run(
         f"Período {periodo} · comparado contra {sc.periodo_anterior(periodo)} · "
+        f"corte {corte} · "
         f"generado el {date.today():%d/%m/%Y}")
     r.font.size, r.font.italic = Pt(9), True
 
@@ -142,7 +144,7 @@ def escribir(secciones: list[sc.Seccion], periodo: str, ruta: Path,
             "Márgenes netos calculados post-comisión, post-IIBB y post-envío, "
             "recalculados por el motor desde sus insumos. El margen del período "
             "es ponderado por facturación. Los márgenes varían en puntos "
-            "porcentuales (pp).")
+            f"porcentuales (pp). Corte comparativo declarado: {corte}.")
     doc.add_paragraph(nota)
 
     # Spec §7, regla 2: toda reexpresión se declara, aunque sea chica.
@@ -172,7 +174,7 @@ def escribir(secciones: list[sc.Seccion], periodo: str, ruta: Path,
 
 def generar(archivo, periodo: str, canal: str = "ambos",
             salida: Path | None = None, estricto: bool = False,
-            publicar: bool = False) -> Path:
+            publicar: bool = False, corte: str = "trimestral") -> Path:
     """De la planilla al .docx, en un solo paso.
 
     publicar=True congela los datos del mes en un snapshot: esa foto pasa a
@@ -188,7 +190,7 @@ def generar(archivo, periodo: str, canal: str = "ambos",
         raise SystemExit(f"Modo estricto: hay hallazgos de severidad alta ({altas}). "
                          "Corregí la planilla o generá sin --estricto.")
 
-    secciones = sc.construir(df, periodo)
+    secciones = sc.construir(df, periodo, corte=corte)
     reexp = None
     if canal == "ambos":
         reexp = md.reexpresiones(df, periodo)
@@ -197,8 +199,9 @@ def generar(archivo, periodo: str, canal: str = "ambos",
         # sub-canal daría diferencias falsas.
         secciones = [s for s in secciones if s.id != "mod.integridad"]
 
-    salida = salida or cfg.DIR_SALIDA / f"Informe_Ventas_{periodo}_{canal}.docx"
-    ruta = escribir(secciones, periodo, salida, len(del_periodo), hallazgos, reexp)
+    salida = salida or cfg.DIR_SALIDA / f"Informe_Ventas_{periodo}_{corte}_{canal}.docx"
+    ruta = escribir(secciones, periodo, salida, len(del_periodo), hallazgos, reexp,
+                    corte)
 
     if publicar:
         if canal != "ambos":
@@ -219,12 +222,14 @@ def main() -> None:
                    choices=["ambos", "canal_verde", "stock_verde"])
     p.add_argument("--estricto", action="store_true",
                    help="No generar si hay hallazgos de severidad alta")
+    p.add_argument("--corte", default="trimestral", choices=list(md.CORTES),
+                   help="Corte comparativo de la analítica larga (spec §3)")
     p.add_argument("--publicar", action="store_true",
                    help="Congelar los datos del mes como versión publicada")
     a = p.parse_args()
 
     ruta = generar(a.archivo, a.mes, a.canal, estricto=a.estricto,
-                   publicar=a.publicar)
+                   publicar=a.publicar, corte=a.corte)
     print(f"Informe generado: {ruta}")
 
 
