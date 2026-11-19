@@ -80,10 +80,61 @@ def mod_graduacion(df: pd.DataFrame, periodo: str) -> Seccion | None:
 
 
 # ──────────────────────────────────────────────────────────────────────
+# mod.logistica — fuga logística real
+# ──────────────────────────────────────────────────────────────────────
+
+def mod_logistica(df: pd.DataFrame, periodo: str) -> Seccion | None:
+    """Condición de entrada: al menos una plataforma o método de envío con
+    fuga real (balance de envíos < 0, margen ≥ 1 pp debajo del canal y
+    participación ≥ 1%). Ordenado por costo en pesos, no por balance.
+    """
+    actual = filtrar_periodo(df, periodo)
+    if actual.empty:
+        return None
+
+    frases, tablas, costo_total = [], {}, 0.0
+    for columna, etiqueta in ((cfg.PLATAFORMA, "Plataforma"),
+                              (cfg.METODO_ENVIO, "Método de envío")):
+        if columna not in actual.columns:
+            continue
+        t = m.fuga_logistica(actual, columna,
+                             brecha_minima_pp=cfg.FUGA_BRECHA_MINIMA_PP,
+                             participacion_minima=cfg.FUGA_PARTICIPACION_MINIMA)
+        fugas = t[t["fuga_real"]]
+        if fugas.empty:
+            continue
+
+        tablas[columna] = pd.DataFrame({
+            etiqueta: fugas.index.astype(str),
+            "Participación": [porcentaje(x, 1) for x in fugas["participacion"]],
+            "Margen neto": [porcentaje(x) for x in fugas["margen_neto"]],
+            "Brecha": [pp(x) for x in fugas["brecha_margen_pp"]],
+            "Ganancia no obtenida": [pesos(-x) for x in fugas["costo_en_margen"]],
+        })
+        peor = fila(fugas, fugas.index[0])            # ya viene ordenado por costo
+        frases.append(
+            f"Por {etiqueta.lower()}: {len(fugas)} con fuga real. La de mayor costo es "
+            f"{fugas.index[0]}, con margen de {porcentaje(peor['margen_neto'])} "
+            f"({pp(peor['brecha_margen_pp'])} contra el canal): "
+            f"{pesos(-peor['costo_en_margen'])} de ganancia no obtenida.")
+        if columna == cfg.PLATAFORMA:                 # no sumar dos veces lo mismo
+            costo_total = float(-fugas["costo_en_margen"].sum())
+
+    if not tablas:
+        return None
+
+    if costo_total:
+        frases.insert(0, f"Operando al margen del canal, las plataformas con fuga "
+                         f"habrían generado {pesos(costo_total)} más de ganancia neta.")
+    frases.append("[Completar: ¿el precio cubre el flete en estas plataformas?]")
+    return Seccion("mod.logistica", "Fuga logística", frases=frases, tablas=tablas)
+
+
+# ──────────────────────────────────────────────────────────────────────
 # Registro: el orden de esta lista es el orden en el informe
 # ──────────────────────────────────────────────────────────────────────
 
-MODULOS = [mod_graduacion]
+MODULOS = [mod_graduacion, mod_logistica]
 
 
 def activos(df: pd.DataFrame, periodo: str) -> list[Seccion]:

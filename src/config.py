@@ -139,7 +139,10 @@ PISO_MARGEN_ALARMA_2 = 20.0   # alerta severa
 PISO_MARGEN_OBJETIVO = 26.0   # nivel de recuperación declarado
 MESES_TENDENCIA_ALARMA = 3    # caídas consecutivas que disparan alerta
 
-UMBRAL_LOGISTICA = 0.0025     # 0,25% de la facturación
+# Fuga logística real (spec, decisión 31/10): las tres condiciones juntas.
+# Reemplaza al viejo umbral de 0,25%, que medía tamaño y no problema.
+FUGA_BRECHA_MINIMA_PP = 1.0        # margen al menos 1 pp debajo del canal
+FUGA_PARTICIPACION_MINIMA = 1.0    # al menos 1% de la facturación
 UMBRAL_DISPERSION_SEMANAL = 1.5   # semana pico / semana valle
 
 MES_BASE_INDICE = "2026-04"   # abril 2026 = 100
@@ -149,7 +152,7 @@ MES_BASE_INDICE = "2026-04"   # abril 2026 = 100
 # Reglas de validación — docs/03, hoja "Validaciones"
 # ──────────────────────────────────────────────────────────────────────
 
-MARGEN_NETO_MIN = -0.20   # −20%
+MARGEN_NETO_MIN = -0.20   # -20%
 MARGEN_NETO_MAX = 0.45    # +45%
 MARGEN_BRUTO_MAX = 0.45
 COMISION_PCT_MAX = 45.0
