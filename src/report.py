@@ -206,6 +206,11 @@ def generar(archivo, periodo: str, canal: str = "ambos",
     ruta = escribir(secciones, periodo, salida, len(del_periodo), hallazgos, reexp,
                     corte)
 
+    # A2: el Resumen y QA sale de las MISMAS secciones (invariante I2).
+    from . import qa                        # import local: qa importa report
+    resumen_qa = qa.construir(df, periodo, secciones, params)
+    qa.escribir(resumen_qa, salida.parent / f"Resumen_QA_{periodo}_{corte}_{canal}.docx")
+
     if publicar:
         if canal != "ambos":
             raise SystemExit("--publicar solo vale para el total (--canal ambos).")
