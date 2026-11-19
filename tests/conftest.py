@@ -50,7 +50,7 @@ def _fila(**kw):
 def venta_blanca():
     """Una venta en Blanco con números redondos verificables a mano.
 
-    Base 100.000 (sin IVA) − IIBB 4.000 − costo 50.000 − comisión 12.100
+    Base 100.000 (sin IVA) - IIBB 4.000 - costo 50.000 - comisión 12.100
       = ganancia bruta 33.900        → margen bruto 33,9%
     + diferencia de envío 2.000 (con IVA, porque es Blanco)
       = ganancia neta 35.900         → margen neto 35,9%
@@ -62,7 +62,7 @@ def venta_blanca():
 def venta_negra():
     """La misma venta pero en Negro, para contrastar la bifurcación fiscal.
 
-    Base 121.000 (CON IVA) − IIBB 0 − costo 50.000 − comisión 12.100
+    Base 121.000 (CON IVA) - IIBB 0 - costo 50.000 - comisión 12.100
       = ganancia bruta 58.900
     + diferencia de envío 2.000 / 1,21 = 1.652,89 (sin IVA, porque es Negro)
       = ganancia neta 60.552,89
@@ -106,3 +106,15 @@ def planilla_xlsx(tmp_path, ventas_mixtas):
     ruta = tmp_path / "planilla.xlsx"
     ventas_mixtas.to_excel(ruta, sheet_name=cfg.HOJA_VENTAS, index=False)
     return ruta
+
+
+@pytest.fixture(autouse=True)
+def snapshots_aislados(tmp_path, monkeypatch):
+    """autouse=True: corre sola en TODOS los tests, sin pedirla.
+
+    Desvía la carpeta de snapshots a una temporal. Sin esto, un test podría
+    leer los snapshots reales de data/snapshots/ (con datos de la empresa)
+    y su resultado dependería de qué haya en tu disco.
+    """
+    from src import snapshot as snap
+    monkeypatch.setattr(snap, "DIR_SNAPSHOTS", tmp_path / "snapshots_aislados")

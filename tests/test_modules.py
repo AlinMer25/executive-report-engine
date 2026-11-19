@@ -86,3 +86,40 @@ def test_evolucion_entra_con_semana_pico(sinteticos):
 def test_evolucion_no_entra_si_el_mes_es_parejo(sinteticos, monkeypatch):
     monkeypatch.setattr(md.cfg, "UMBRAL_DISPERSION_SEMANAL", 1000.0)
     assert md.mod_evolucion(sinteticos, "2026-09") is None
+
+
+# ── mod.integridad ──────────────────────────────────────────────────────
+
+from src import snapshot as snap  # noqa: E402
+
+
+def test_integridad_no_entra_sin_snapshots(sinteticos):
+    assert md.mod_integridad(sinteticos, "2026-09") is None
+
+
+def test_integridad_no_entra_si_no_cambio_nada(sinteticos):
+    snap.congelar(md.filtrar_periodo(sinteticos, "2026-08"), "2026-08")
+    assert md.reexpresiones(sinteticos, "2026-09").empty
+    assert md.mod_integridad(sinteticos, "2026-09") is None
+
+
+def test_integridad_detecta_un_mes_reexpresado(sinteticos):
+    """Se publica agosto; después aparece un 10% más de ventas cargadas tarde."""
+    agosto = md.filtrar_periodo(sinteticos, "2026-08")
+    snap.congelar(agosto, "2026-08", etiqueta="informe publicado")
+    tardias = agosto.head(len(agosto) // 10)
+    hoy = pd.concat([sinteticos, tardias])
+
+    s = md.mod_integridad(hoy, "2026-09")
+    assert s is not None
+    assert "2026-08" in s.frases[0]
+    assert "Ventas" in set(s.tablas["reexpresiones"]["Métrica"])
+
+
+def test_cambio_chico_va_solo_a_metodologia(sinteticos):
+    """Un cambio < 5% se declara, pero no abre sección propia."""
+    agosto = md.filtrar_periodo(sinteticos, "2026-08")
+    snap.congelar(agosto, "2026-08")
+    hoy = pd.concat([sinteticos, agosto.head(3)])
+    assert not md.reexpresiones(hoy, "2026-09").empty
+    assert md.mod_integridad(hoy, "2026-09") is None

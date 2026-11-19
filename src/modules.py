@@ -12,7 +12,9 @@ import pandas as pd
 
 from . import config as cfg
 from . import metrics as m
-from .sections import Seccion, fila, filtrar_periodo, pesos, porcentaje, pp
+from . import snapshot as snap
+from .sections import (Seccion, fila, filtrar_periodo, periodo_anterior, pesos,
+                       porcentaje, pp)
 
 
 # ──────────────────────────────────────────────────────────────────────
@@ -200,10 +202,93 @@ def mod_evolucion(df: pd.DataFrame, periodo: str) -> Seccion | None:
 
 
 # ──────────────────────────────────────────────────────────────────────
+# mod.integridad — reexpresión de meses ya publicados (spec §7)
+# ──────────────────────────────────────────────────────────────────────
+
+METRICAS_CABECERA = {
+    "operaciones": "Ventas",
+    "unidades": "Unidades",
+    "facturacion": "Facturación",
+    "ganancia_neta": "Ganancia neta",
+    "margen_neto": "Margen neto",
+}
+UMBRAL_REEXPRESION = 5.0      # % de cambio que obliga a una sección propia
+
+
+def reexpresiones(df: pd.DataFrame, periodo: str, meses: int = 6) -> pd.DataFrame:
+    """Compara cada mes anterior a `periodo` contra su versión PUBLICADA.
+
+    La versión publicada es el primer snapshot de ese mes (el que se congeló
+    al entregar el informe). La actual es lo que dice hoy la planilla.
+    Devuelve una fila por cada métrica que cambió, aunque sea un poco:
+    core.metodologia las declara todas, mod.integridad solo las grandes.
+    """
+    filas = []
+    for k in range(meses - 1, 0, -1):
+        mes = periodo_anterior(periodo, k)
+        versiones = snap.listar(mes)
+        datos = filtrar_periodo(df, mes)
+        if versiones.empty or datos.empty:
+            continue
+        publicado = fila(versiones, versiones.index[-1])   # la más vieja va última
+        hoy = snap.totales(datos)
+        for clave, nombre in METRICAS_CABECERA.items():
+            antes, ahora = float(publicado[clave]), float(hoy[clave])
+            if abs(ahora - antes) < 1e-6:                  # no cambió
+                continue
+            filas.append({
+                "periodo": mes,
+                "metrica": nombre,
+                "publicado": antes,
+                "actual": ahora,
+                "variacion_pct": (ahora - antes) / antes * 100 if antes else 100.0,
+            })
+    return pd.DataFrame(filas, columns=["periodo", "metrica", "publicado",
+                                        "actual", "variacion_pct"])
+
+
+def valor_cabecera(metrica: str, x: float) -> str:
+    """Formatea un valor según la métrica: pesos, porcentaje o cantidad."""
+    if metrica == "Margen neto":
+        return porcentaje(x)
+    if metrica in ("Facturación", "Ganancia neta"):
+        return pesos(x)
+    return f"{x:,.0f}".replace(",", ".")
+
+
+def mod_integridad(df: pd.DataFrame, periodo: str) -> Seccion | None:
+    """Condición de entrada: algún mes publicado cambió ≥ 5% en una métrica
+    de cabecera. Los cambios menores van solo a la nota metodológica."""
+    r = reexpresiones(df, periodo)
+    grandes = r[r["variacion_pct"].abs() >= UMBRAL_REEXPRESION]
+    if grandes.empty:
+        return None
+
+    tabla = pd.DataFrame({
+        "Período": grandes["periodo"],
+        "Métrica": grandes["metrica"],
+        "Publicado": [valor_cabecera(mt, x) for mt, x in zip(grandes["metrica"], grandes["publicado"])],
+        "Actual": [valor_cabecera(mt, x) for mt, x in zip(grandes["metrica"], grandes["actual"])],
+        "Variación": [f"{x:+.1f}%".replace(".", ",") for x in grandes["variacion_pct"]],
+    })
+    meses = ", ".join(sorted(grandes["periodo"].unique()))
+    frases = [
+        f"Las cifras de {meses} difieren en más de un "
+        f"{UMBRAL_REEXPRESION:.0f}% de las publicadas. Este informe usa los "
+        f"valores actuales; los publicados se conservan en el registro de "
+        f"versiones.",
+        "[Completar: motivo de la reexpresión (carga tardía de costos, "
+        "cancelaciones, depuración).]",
+    ]
+    return Seccion("mod.integridad", "Nota de integridad de datos",
+                   frases=frases, tablas={"reexpresiones": tabla})
+
+
+# ──────────────────────────────────────────────────────────────────────
 # Registro: el orden de esta lista es el orden en el informe
 # ──────────────────────────────────────────────────────────────────────
 
-MODULOS = [mod_logistica, mod_evolucion, mod_graduacion]
+MODULOS = [mod_integridad, mod_logistica, mod_evolucion, mod_graduacion]
 
 
 def activos(df: pd.DataFrame, periodo: str) -> list[Seccion]:

@@ -28,7 +28,9 @@ from docx.shared import Cm, Pt, RGBColor
 from docx.styles.style import ParagraphStyle
 
 from . import config as cfg
+from . import modules as md
 from . import sections as sc
+from . import snapshot as snap
 from . import validate as val
 from .ingest import cargar_ventas
 
@@ -97,7 +99,8 @@ def _alerta(doc, texto: str) -> None:
 # ──────────────────────────────────────────────────────────────────────
 
 def escribir(secciones: list[sc.Seccion], periodo: str, ruta: Path,
-             filas_analizadas: int, hallazgos: list) -> Path:
+             filas_analizadas: int, hallazgos: list,
+             reexp: pd.DataFrame | None = None) -> Path:
     """Arma el .docx a partir de las secciones."""
     doc = Document()
     estilo = cast(ParagraphStyle, doc.styles["Normal"])   # le aclara el tipo a Pylance
@@ -142,6 +145,19 @@ def escribir(secciones: list[sc.Seccion], periodo: str, ruta: Path,
             "porcentuales (pp).")
     doc.add_paragraph(nota)
 
+    # Spec §7, regla 2: toda reexpresión se declara, aunque sea chica.
+    if reexp is not None and not reexp.empty:
+        doc.add_paragraph(
+            "Cifras de meses ya publicados que cambiaron:").runs[0].bold = True
+        # to_dict("records"): una lista de diccionarios, uno por fila.
+        for r in reexp.to_dict("records"):
+            metrica = str(r["metrica"])
+            antes = md.valor_cabecera(metrica, float(r["publicado"]))
+            ahora = md.valor_cabecera(metrica, float(r["actual"]))
+            var = f"{float(r['variacion_pct']):+.1f}%".replace(".", ",")
+            doc.add_paragraph(f"{r['periodo']} · {metrica}: {antes} → {ahora} ({var})",
+                              style="List Bullet")
+
     if hallazgos:
         doc.add_paragraph(
             "Calidad de datos al momento de generar el informe:").runs[0].bold = True
@@ -155,8 +171,14 @@ def escribir(secciones: list[sc.Seccion], periodo: str, ruta: Path,
 
 
 def generar(archivo, periodo: str, canal: str = "ambos",
-            salida: Path | None = None, estricto: bool = False) -> Path:
-    """De la planilla al .docx, en un solo paso."""
+            salida: Path | None = None, estricto: bool = False,
+            publicar: bool = False) -> Path:
+    """De la planilla al .docx, en un solo paso.
+
+    publicar=True congela los datos del mes en un snapshot: esa foto pasa a
+    ser "lo publicado" contra lo que mod.integridad compara en los meses
+    siguientes. Se usa una sola vez, con la versión que se entrega.
+    """
     df = cargar_ventas(archivo, canal=canal)
     del_periodo = sc.filtrar_periodo(df, periodo)
 
@@ -167,8 +189,22 @@ def generar(archivo, periodo: str, canal: str = "ambos",
                          "Corregí la planilla o generá sin --estricto.")
 
     secciones = sc.construir(df, periodo)
+    reexp = None
+    if canal == "ambos":
+        reexp = md.reexpresiones(df, periodo)
+    else:
+        # Los snapshots publicados son del total: comparar contra un solo
+        # sub-canal daría diferencias falsas.
+        secciones = [s for s in secciones if s.id != "mod.integridad"]
+
     salida = salida or cfg.DIR_SALIDA / f"Informe_Ventas_{periodo}_{canal}.docx"
-    return escribir(secciones, periodo, salida, len(del_periodo), hallazgos)
+    ruta = escribir(secciones, periodo, salida, len(del_periodo), hallazgos, reexp)
+
+    if publicar:
+        if canal != "ambos":
+            raise SystemExit("--publicar solo vale para el total (--canal ambos).")
+        snap.congelar(del_periodo, periodo, etiqueta="informe publicado")
+    return ruta
 
 
 # ──────────────────────────────────────────────────────────────────────
@@ -183,9 +219,12 @@ def main() -> None:
                    choices=["ambos", "canal_verde", "stock_verde"])
     p.add_argument("--estricto", action="store_true",
                    help="No generar si hay hallazgos de severidad alta")
+    p.add_argument("--publicar", action="store_true",
+                   help="Congelar los datos del mes como versión publicada")
     a = p.parse_args()
 
-    ruta = generar(a.archivo, a.mes, a.canal, estricto=a.estricto)
+    ruta = generar(a.archivo, a.mes, a.canal, estricto=a.estricto,
+                   publicar=a.publicar)
     print(f"Informe generado: {ruta}")
 
 

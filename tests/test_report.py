@@ -51,3 +51,11 @@ def test_estricto_frena_con_hallazgos_altos(planilla, tmp_path, monkeypatch):
     with pytest.raises(SystemExit):
         report.generar(planilla, "2026-09", salida=tmp_path / "i.docx",
                        estricto=True)
+
+
+def test_publicar_congela_el_mes(planilla, tmp_path):
+    from src import snapshot as snap
+    report.generar(planilla, "2026-09", salida=tmp_path / "i.docx", publicar=True)
+    versiones = snap.listar("2026-09")
+    assert len(versiones) == 1
+    assert versiones.iloc[0]["etiqueta"] == "informe publicado"
