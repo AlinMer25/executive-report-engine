@@ -47,6 +47,8 @@ MES = "Mes"
 FECHA = "Fecha"
 CANTIDAD = "Cantidad"
 CLIENTE_ID = "Nro de Cliente"
+CLIENTE_NOMBRE = "Cliente"
+ID_ORDEN = "ID Order"
 
 EMPRESA = "Empresa"
 REGIMEN = "Facturación"          # "Blanco" o "Negro"
@@ -93,6 +95,7 @@ MARGEN_NETO = "Margen Neto de Venta"
 # de fórmula encontrados en cada fila, p. ej. "Monto por Venta: #REF!".
 # Lleva guion bajo adelante para distinguirla de las columnas originales.
 ERRORES_FORMULA = "_errores_formula"
+FILA_PLANILLA = "_fila_planilla"    # número de fila en la planilla (para buscarla)
 
 # Columnas sin las cuales el motor no puede calcular nada.
 # Si alguna falta, la carga falla de entrada con un mensaje claro

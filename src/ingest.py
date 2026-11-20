@@ -9,6 +9,8 @@ La frontera importa. Si la carga también calculara, un error de lectura y un
 error de fórmula se confundirían, y el descuadre sería imposible de ubicar.
 """
 
+import re
+
 import openpyxl
 import pandas as pd
 
@@ -110,6 +112,12 @@ COLUMNAS_NUMERICAS = [
 # Pasos de la carga
 # ──────────────────────────────────────────────────────────────────────
 
+# Errores que llegan como TEXTO y no como error de Excel. Pasa al descargar
+# desde Google Sheets: "#ERROR!" no existe en Excel y queda escrito tal cual.
+# Cubre las versiones en inglés y en castellano (#¡REF!, #¡VALOR!, #N/D...).
+PATRON_ERROR_TEXTO = re.compile(r"^#¡?[A-ZÁÉÍÓÚa-z/0-9]{1,8}[!?]?$")
+
+
 def detectar_errores_formula(ruta, hoja: str) -> list[str]:
     """Lista, fila por fila, los errores de fórmula de la planilla.
 
@@ -132,7 +140,10 @@ def detectar_errores_formula(ruta, hoja: str) -> list[str]:
     for fila in filas:
         errores = [f"{encabezados[i]}: {celda.value}"
                    for i, celda in enumerate(fila)
-                   if celda.data_type == "e" and i < len(encabezados)]
+                   if i < len(encabezados) and (
+                       celda.data_type == "e"                 # error de Excel
+                       or (isinstance(celda.value, str)       # error como texto
+                           and PATRON_ERROR_TEXTO.match(celda.value.strip())))]
         resultado.append("; ".join(errores))
     libro.close()
     return resultado
@@ -257,6 +268,10 @@ def cargar_ventas(ruta, canal: str = "ambos", hoja: str = cfg.HOJA_VENTAS) -> pd
     # borra. Se guardan en una columna propia que viaja con cada fila.
     errores = detectar_errores_formula(ruta, hoja)
     df[cfg.ERRORES_FORMULA] = (errores + [""] * len(df))[:len(df)]
+
+    # El número de fila de la planilla viaja con cada venta: es lo que el
+    # analista busca para reparar un dato (fila 1 = encabezados).
+    df[cfg.FILA_PLANILLA] = range(2, len(df) + 2)
 
     verificar_columnas(df)
     df = convertir_numeros(df)

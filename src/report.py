@@ -103,7 +103,8 @@ def _alerta(doc, texto: str) -> None:
 def escribir(secciones: list[sc.Seccion], periodo: str, ruta: Path,
              filas_analizadas: int, hallazgos: list,
              reexp: pd.DataFrame | None = None,
-             corte: str = "trimestral", publico: bool = False) -> Path:
+             corte: str = "trimestral", publico: bool = False,
+             revisar: pd.DataFrame | None = None) -> Path:
     """Arma el .docx a partir de las secciones."""
     doc = Document()
     estilo = cast(ParagraphStyle, doc.styles["Normal"])   # le aclara el tipo a Pylance
@@ -174,6 +175,18 @@ def escribir(secciones: list[sc.Seccion], periodo: str, ruta: Path,
             doc.add_paragraph(f"{h.id} · {h.nombre}: {h.cantidad} filas "
                               f"(severidad {h.severidad}).", style="List Bullet")
 
+    # ── Anexo para el analista: filas a reparar en la planilla.
+    # Trae datos de clientes: solo en la versión interna, nunca en la pública.
+    if revisar is not None and not revisar.empty and not publico:
+        doc.add_heading("Anexo para el analista: filas a revisar en la planilla",
+                        level=1)
+        doc.add_paragraph(
+            f"{len(revisar)} filas del período tienen al menos un problema. "
+            "Buscalas por número de fila (o por cliente) en la planilla, "
+            "corregí el dato y volvé a generar el informe. Uso interno: "
+            "no compartir este anexo.")
+        _tabla(doc, revisar)
+
     ruta.parent.mkdir(parents=True, exist_ok=True)
     doc.save(str(ruta))
     return ruta
@@ -229,8 +242,9 @@ def generar(archivo, periodo: str, canal: str = "ambos",
         if publico:
             pub.limpiar_secciones(secciones, mapa)
 
+        revisar = None if publico else val.filas_a_revisar(del_periodo, hallazgos)
         ruta = escribir(secciones, periodo, salida, len(del_periodo), hallazgos,
-                        reexp, corte, publico)
+                        reexp, corte, publico, revisar)
 
         # A2: el Resumen y QA sale de las MISMAS secciones (invariante I2).
         from . import qa                    # import local: qa importa report

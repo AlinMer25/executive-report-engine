@@ -214,6 +214,41 @@ def validar(df: pd.DataFrame, columnas_muestra: list[str] | None = None
     return hallazgos
 
 
+def filas_a_revisar(df: pd.DataFrame, hallazgos: list[Hallazgo]) -> pd.DataFrame:
+    """Una fila por venta con problemas, con lo necesario para encontrarla
+    en la planilla y saber qué arreglar.
+
+    Uso INTERNO: trae número y nombre de cliente. Nunca va al modo público.
+
+    Columnas: fila de la planilla, fecha, ID de orden, número y nombre de
+    cliente, producto y la lista de problemas. Para los errores de fórmula
+    dice qué celda y qué error ("Costo Total: #REF!").
+    """
+    problemas: dict = {}
+    orden = {ALTA: 0, MEDIA: 1, BAJA: 2}
+    for h in sorted(hallazgos, key=lambda x: orden[x.severidad]):
+        for i in h.filas.index:
+            texto = f"{h.id} {h.nombre.lower()}"
+            if h.id == "R16" and cfg.ERRORES_FORMULA in df.columns:
+                texto = f"R16 {df.at[i, cfg.ERRORES_FORMULA]}"
+            problemas.setdefault(i, []).append(texto)
+
+    columnas = {cfg.FILA_PLANILLA: "Fila", cfg.FECHA: "Fecha", cfg.ID_ORDEN: "ID Order",
+                cfg.CLIENTE_ID: "Nro de cliente", cfg.CLIENTE_NOMBRE: "Cliente",
+                cfg.PRODUCTO: "Producto"}
+    presentes = [c for c in columnas if c in df.columns]
+    if not problemas:
+        return pd.DataFrame(columns=[columnas[c] for c in presentes] + ["Qué revisar"])
+
+    t = df.loc[list(problemas), presentes].rename(columns=columnas)
+    t["Qué revisar"] = ["; ".join(problemas[i]) for i in problemas]
+    if "Fecha" in t.columns:
+        t["Fecha"] = pd.to_datetime(t["Fecha"], errors="coerce").dt.strftime("%d/%m/%Y")
+    if "Fila" in t.columns:
+        t = t.sort_values("Fila")
+    return t.fillna("—").astype(str).reset_index(drop=True)
+
+
 def informe(df: pd.DataFrame) -> pd.DataFrame:
     """Tabla resumen de la validación, ordenada por severidad."""
     orden = {ALTA: 0, MEDIA: 1, BAJA: 2}

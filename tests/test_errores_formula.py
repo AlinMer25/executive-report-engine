@@ -68,3 +68,16 @@ def test_una_planilla_sana_no_dispara_r16(planilla_xlsx):
 def test_detecta_los_siete_tipos_de_error(tmp_path, planilla_xlsx, error):
     ruta = _con_errores(planilla_xlsx, tmp_path / "e.xlsx", {0: (cfg.IIBB, error)})
     assert error in cargar_ventas(ruta)[cfg.ERRORES_FORMULA].iloc[0]
+
+
+@pytest.mark.parametrize("texto", ["#ERROR!", "#N/A", "#¡REF!", "#VALUE!", "#DIV/0!", "#NAME?"])
+def test_errores_que_llegan_como_texto(texto):
+    """Google Sheets exporta algunos errores como texto (#ERROR! no existe en Excel)."""
+    from src.ingest import PATRON_ERROR_TEXTO
+    assert PATRON_ERROR_TEXTO.match(texto)
+
+
+@pytest.mark.parametrize("texto", ["#1 en ventas", "Hashtag", "#promo verano"])
+def test_texto_normal_con_numeral_no_es_error(texto):
+    from src.ingest import PATRON_ERROR_TEXTO
+    assert not PATRON_ERROR_TEXTO.match(texto)

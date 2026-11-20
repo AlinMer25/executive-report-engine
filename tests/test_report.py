@@ -10,9 +10,11 @@ from src import sample_data
 
 
 def _titulos(doc):
-    """Textos de los títulos de sección (estilo Heading 1)."""
+    """Textos de los títulos de sección numerados (estilo Heading 1).
+    El anexo para el analista no lleva número: no es parte del informe."""
     return [p.text for p in doc.paragraphs
-            if p.style is not None and p.style.name == "Heading 1"]
+            if p.style is not None and p.style.name == "Heading 1"
+            and not p.text.startswith("Anexo")]
 
 
 @pytest.fixture(scope="module")
@@ -65,3 +67,47 @@ def test_leer_parametros_de_la_terminal():
     assert report.leer_dotacion("2026-08=2, 2026-09=3") == {"2026-08": 2.0, "2026-09": 3.0}
     assert report.leer_dotacion(None) == {}
     assert report.leer_ventana("2026-07,2026-09") == ("2026-07", "2026-09")
+
+
+# ── Anexo para el analista ──────────────────────────────────────────────
+
+def _todo(doc):
+    return "\n".join([p.text for p in doc.paragraphs] +
+                     [c.text for t in doc.tables for f in t.rows for c in f.cells])
+
+
+def test_anexo_lista_filas_buscables_con_su_problema(tmp_path):
+    """Una fila sin categoría y otra con #REF! tienen que aparecer con su
+    número de fila, su cliente y qué revisar."""
+    from openpyxl import load_workbook
+    from openpyxl.cell.cell import Cell
+    from src import config as cfg
+    df = sample_data.generar()
+    sept = df.index[df[cfg.FECHA].astype(str).str.endswith("/09/2026")]
+    df.loc[sept[0], cfg.CATEGORIA] = None
+    df[cfg.CLIENTE_NOMBRE] = "Cliente de prueba"
+    ruta = tmp_path / "ventas.xlsx"
+    df.to_excel(ruta, sheet_name=cfg.HOJA_VENTAS, index=False)
+
+    # Un #REF! de verdad en la celda del costo de otra venta de septiembre.
+    libro = load_workbook(ruta)
+    hoja = libro[cfg.HOJA_VENTAS]
+    col = [c.value for c in hoja[1]].index(cfg.COSTO_TOTAL) + 1
+    celda = hoja.cell(row=int(sept[1]) + 2, column=col)
+    assert isinstance(celda, Cell)                 # no es una celda combinada
+    celda.value, celda.data_type = "#REF!", "e"
+    libro.save(ruta)
+
+    salida = report.generar(ruta, "2026-09", salida=tmp_path / "i.docx")
+    texto = _todo(Document(str(salida)))
+    assert "Anexo para el analista" in texto
+    assert "R09 producto sin categoría" in texto
+    assert f"{cfg.COSTO_TOTAL}: #REF!" in texto
+    assert str(int(sept[0]) + 2) in texto          # la fila, como en la planilla
+    assert "Cliente de prueba" in texto
+
+
+def test_el_anexo_nunca_va_al_modo_publico(planilla, tmp_path):
+    salida = report.generar(planilla, "2026-09", modo="publico",
+                            salida=tmp_path / "p.docx")
+    assert "Anexo para el analista" not in _todo(Document(str(salida)))
