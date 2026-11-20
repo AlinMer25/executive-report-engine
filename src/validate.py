@@ -21,6 +21,7 @@ from dataclasses import dataclass, field
 import pandas as pd
 
 from . import config as cfg
+from .ingest import a_fecha
 from . import metrics as m
 
 ALTA, MEDIA, BAJA = "alta", "media", "baja"
@@ -63,7 +64,7 @@ def _r05_costo_mayor_que_ingreso(d):
     return d[m.C_COSTO_SIN_IVA] > (d[m.C_BASE] - d[m.C_COMISION])
 
 def _r06_mes_no_coincide_con_fecha(d):
-    fecha = pd.to_datetime(d[cfg.FECHA], dayfirst=True, errors="coerce")
+    fecha = a_fecha(d[cfg.FECHA])        # un solo criterio de fechas en todo el motor
     meses = {1:"Enero",2:"Febrero",3:"Marzo",4:"Abril",5:"Mayo",6:"Junio",7:"Julio",
              8:"Agosto",9:"Septiembre",10:"Octubre",11:"Noviembre",12:"Diciembre"}
     real = fecha.dt.month.map(meses)

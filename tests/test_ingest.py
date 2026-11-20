@@ -107,3 +107,45 @@ def test_encabezados_con_espacios_se_limpian(tmp_path, ventas_mixtas):
     sucio.to_excel(ruta, sheet_name=cfg.HOJA_VENTAS, index=False)
     df = cargar_ventas(ruta)
     assert all(c == c.strip() for c in df.columns)
+
+
+# ── La prueba de octubre: planilla descargada directo de Google Sheets ─────
+
+def test_fechas_en_las_tres_formas_dan_el_mismo_mes():
+    """dayfirst=True leía '2026-10-03' como 10 de marzo y '2026-10-25' como nada."""
+    from src.ingest import a_fecha
+    textos = pd.Series(["03/10/2026", "2026-10-03 00:00:00", "2026-10-25"], dtype=object)
+    assert list(a_fecha(textos).dt.strftime("%Y-%m-%d")) == \
+        ["2026-10-03", "2026-10-03", "2026-10-25"]
+    nativas = pd.Series(pd.to_datetime(["2026-10-03"]))
+    assert a_fecha(nativas).iloc[0].day == 3          # una fecha de verdad pasa intacta
+
+
+def test_numeros_nativos_mezclados_con_texto():
+    """Un solo '1,21' tipeado a mano volvía 1105 a todo el resto de la columna."""
+    from src.ingest import a_numero
+    mezcla = pd.Series([1.105, 1.21, "1,21", 310800.0, " $399.999,00"], dtype=object)
+    assert list(a_numero(mezcla)) == [1.105, 1.21, 1.21, 310800.0, 399999.0]
+
+
+def test_planilla_nativa_da_lo_mismo_que_la_de_texto(tmp_path):
+    """La misma planilla, guardada como texto o con celdas nativas, tiene
+    que dar exactamente las mismas ventas y la misma ganancia."""
+    from src import metrics as m
+    from src import sample_data as sd
+    from src.ingest import cargar_ventas
+    from src.sections import filtrar_periodo
+
+    texto = sd.generar()
+    nativa = texto.copy()
+    nativa[cfg.FECHA] = pd.to_datetime(nativa[cfg.FECHA], format="%d/%m/%Y")
+    nativa[cfg.CALCULO_IVA] = nativa[cfg.CALCULO_IVA].astype(object)
+    nativa.loc[nativa.index[0], cfg.CALCULO_IVA] = "1,21" if \
+        nativa[cfg.CALCULO_IVA].iloc[0] == 1.21 else "1,105"   # una celda tipeada a mano
+
+    for nombre, df in (("texto", texto), ("nativa", nativa)):
+        df.to_excel(tmp_path / f"{nombre}.xlsx", sheet_name=cfg.HOJA_VENTAS, index=False)
+    a = filtrar_periodo(cargar_ventas(tmp_path / "texto.xlsx"), "2026-09")
+    b = filtrar_periodo(cargar_ventas(tmp_path / "nativa.xlsx"), "2026-09")
+    assert len(a) == len(b)
+    assert m.resumen(a)["ganancia_neta"] == pytest.approx(m.resumen(b)["ganancia_neta"])

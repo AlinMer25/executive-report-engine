@@ -24,6 +24,7 @@ from dataclasses import dataclass, field
 import pandas as pd
 
 from . import config as cfg
+from .ingest import a_fecha
 from . import metrics as m
 
 # Participación mínima (% de facturación) para que algo cuente como relevante
@@ -103,6 +104,8 @@ def pesos(x: float) -> str:
     """
     if _UNIDAD is not None:
         return unidades(x)
+    if x < 0:                               # -$147,0 M, no $-147,0 M
+        return "-" + pesos(-x)
     if abs(x) >= 1_000_000:
         return f"${x / 1_000_000:,.1f} M".replace(",", "X").replace(".", ",").replace("X", ".")
     return f"${x:,.0f}".replace(",", ".")
@@ -133,7 +136,7 @@ def filtrar_periodo(df: pd.DataFrame, periodo: str) -> pd.DataFrame:
     Se filtra por la fecha y no por la columna 'Mes', porque 'Mes' no tiene
     año: 'Octubre' de 2026 y de 2027 serían lo mismo.
     """
-    fechas = pd.to_datetime(df[cfg.FECHA], dayfirst=True, errors="coerce")
+    fechas = a_fecha(df[cfg.FECHA])        # un solo criterio de fechas en todo el motor
     return df[fechas.dt.strftime("%Y-%m") == periodo].copy()
 
 
@@ -158,7 +161,13 @@ def fila(tabla: pd.DataFrame, clave) -> dict:
 
 
 def variacion(actual: float, anterior: float) -> float:
-    return (actual - anterior) / anterior * 100 if anterior else 0.0
+    """Variación % con el signo de la DIRECCIÓN, no del número.
+
+    Se divide por el valor absoluto del anterior: si la ganancia pasa de
+    -72 a -147, empeoró, y la variación tiene que salir negativa. Dividiendo
+    por -72 salía +104%, y el resumen lo ponía en "lo que funcionó".
+    """
+    return (actual - anterior) / abs(anterior) * 100 if anterior else 0.0
 
 
 # ──────────────────────────────────────────────────────────────────────

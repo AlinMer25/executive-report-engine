@@ -18,7 +18,7 @@ def sinteticos():
 @pytest.mark.parametrize("valor, esperado", [
     (317_480_000, "$317,5 M"),
     (424_437, "$424.437"),
-    (-5_200_000, "$-5,2 M"),
+    (-5_200_000, "-$5,2 M"),
 ])
 def test_formato_de_pesos(valor, esperado):
     assert sc.pesos(valor) == esperado
@@ -130,3 +130,13 @@ def test_graficos_se_cuelgan_de_su_seccion(sinteticos):
 def test_sin_graficos(sinteticos):
     secciones = sc.construir(sinteticos, "2026-09", graficos=False)
     assert all(not s.graficos for s in secciones)
+
+
+def test_variacion_de_negativos_respeta_la_direccion():
+    """Una pérdida que se agranda es una caída, aunque el cociente dé positivo."""
+    assert sc.variacion(-147, -72) < 0
+    assert sc.variacion(-36, -72) > 0
+
+
+def test_pesos_negativos_llevan_el_signo_adelante():
+    assert sc.pesos(-147_000_000) == "-$147,0 M"

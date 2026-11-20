@@ -19,6 +19,27 @@ from . import config as cfg
 # Conversión de números
 # ──────────────────────────────────────────────────────────────────────
 
+def a_fecha(serie: pd.Series) -> pd.Series:
+    """Convierte fechas sin confundir el día con el mes.
+
+    Una fecha puede llegar de tres formas, según cómo se descargó la planilla:
+      - como fecha de verdad (celda de fecha en Excel)  → se usa tal cual
+      - como texto argentino '03/10/2026'               → día/mes/año
+      - como texto ISO '2026-10-03' o '2026-10-03 00:00:00' → año-mes-día
+
+    Cada forma se lee con su formato EXPLÍCITO. El atajo dayfirst=True sobre
+    todo junto fue el bug de la prueba de octubre: leía '2026-10-03' como
+    10 de marzo y '2026-10-25' directamente no la leía, y el mes quedaba
+    con 131 ventas en lugar de 658.
+    """
+    if pd.api.types.is_datetime64_any_dtype(serie):
+        return serie
+    texto = serie.astype("string").str.strip()
+    argentina = pd.to_datetime(texto, format="%d/%m/%Y", errors="coerce")
+    iso = pd.to_datetime(texto.str.slice(0, 10), format="%Y-%m-%d", errors="coerce")
+    return argentina.fillna(iso)          # lo que no es argentino, se prueba ISO
+
+
 def a_numero(serie: pd.Series) -> pd.Series:
     """Convierte texto a número decidiendo el formato por columna.
 
@@ -41,8 +62,17 @@ def a_numero(serie: pd.Series) -> pd.Series:
 
     Lo que no se puede convertir queda nulo (NA), nunca cero: un cero se
     sumaría; un nulo es la ausencia de dato y se puede contar aparte.
+
+    **Celdas que ya son número.** Si la planilla se descarga desde Google
+    Sheets, la mayoría de las celdas llegan como número de verdad (1.105,
+    310800.0) y alguna, cargada a mano, como texto ('1,21'). Los números se
+    respetan tal cual y la decisión de formato se toma SOLO entre los textos.
+    Si no, un único '1,21' tipeado hacía que la columna entera se leyera en
+    formato argentino y 1.105 pasaba a ser 1105: fue el otro bug de octubre.
     """
-    s = serie.astype("string")
+    es_numero = serie.map(lambda v: isinstance(v, (int, float)) and not isinstance(v, bool))
+    numeros = pd.to_numeric(serie.where(es_numero), errors="coerce")
+    s = serie.where(~es_numero).astype("string")
     s = s.str.replace(r"[^\d,.\-()]", "", regex=True)      # quita $, espacios, %
     s = s.str.replace(r"^\((.*)\)$", r"-\1", regex=True)   # (1.234) → -1.234
 
@@ -57,7 +87,10 @@ def a_numero(serie: pd.Series) -> pd.Series:
     # dividir el envío por 1,21 sobre una columna entera levanta un error.
     # Que el tipo dependa de los datos que tocó cargar hace que el motor
     # ande con un dataset y no con otro, que es la peor clase de defecto.
-    return pd.to_numeric(s, errors="coerce").astype("Float64")
+    textos = pd.to_numeric(s, errors="coerce")
+    # Los dos lados al MISMO tipo antes de combinarlos: numeros sale float64
+    # y textos Float64, y mezclar tipos distintos en fillna está deprecado.
+    return numeros.astype("Float64").fillna(textos.astype("Float64"))
 
 
 # Columnas que deben quedar numéricas después de cargar.
@@ -210,12 +243,12 @@ def cargar_ventas(ruta, canal: str = "ambos", hoja: str = cfg.HOJA_VENTAS) -> pd
     hoja : str
         Nombre de la hoja dentro del archivo.
     """
-    # dtype=str obliga a leer TODO como texto. Sin eso, pandas adivina el
-    # tipo de cada columna y con el formato argentino adivina mal: una
-    # columna con '1.234,00' y '999,00' mezcladas termina medio numérica
-    # y medio texto. Mejor leer todo como texto y convertir nosotros,
-    # con reglas que podemos leer y testear.
-    df = pd.read_excel(ruta, sheet_name=hoja, dtype=str)
+    # dtype=object: cada celda llega como lo que es (número, fecha o texto)
+    # y pandas no adivina un tipo por columna. La conversión la hacemos
+    # nosotros, celda por celda, con reglas que podemos leer y testear.
+    # (Antes se leía todo como texto: funcionaba con una planilla exportada
+    # como texto y fallaba con la descarga directa de Google Sheets.)
+    df = pd.read_excel(ruta, sheet_name=hoja, dtype=object)
     # Encabezados sin espacios sobrantes: "Pago x Envio " y "Pago x Envio"
     # pasan a ser la misma columna. Un espacio invisible no rompe el motor.
     df.columns = [str(c).strip() for c in df.columns]
@@ -227,6 +260,7 @@ def cargar_ventas(ruta, canal: str = "ambos", hoja: str = cfg.HOJA_VENTAS) -> pd
 
     verificar_columnas(df)
     df = convertir_numeros(df)
+    df[cfg.FECHA] = a_fecha(df[cfg.FECHA])
     df = descartar_filas_vacias(df)
     df = normalizar_texto(df)
     df = filtrar_canal(df, canal)

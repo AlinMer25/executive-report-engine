@@ -13,6 +13,7 @@ from dataclasses import dataclass, field
 import pandas as pd
 
 from . import config as cfg
+from .ingest import a_fecha
 from . import metrics as m
 from . import snapshot as snap
 from .sections import (Seccion, fila, filtrar_periodo, periodo_anterior, pesos,
@@ -77,7 +78,7 @@ def productos_graduados(df: pd.DataFrame, periodo: str) -> list[str]:
 
     Es la graduación medida, no declarada: el rastro queda en la planilla.
     """
-    fechas = pd.to_datetime(df[cfg.FECHA], errors="coerce", dayfirst=True)
+    fechas = a_fecha(df[cfg.FECHA])
     mes = fechas.dt.strftime("%Y-%m")
     antes = df[mes < periodo]
     ahora = df[mes == periodo]
@@ -199,7 +200,7 @@ def semanas(df: pd.DataFrame, periodo: str) -> pd.DataFrame:
     actual = filtrar_periodo(df, periodo)
     if m.C_GANANCIA_NETA not in actual.columns:
         actual = m.calcular(actual)
-    dia = pd.to_datetime(actual[cfg.FECHA], errors="coerce", dayfirst=True).dt.day
+    dia = a_fecha(actual[cfg.FECHA]).dt.day
     dias_del_mes = pd.Period(periodo, freq="M").days_in_month
 
     filas = []
