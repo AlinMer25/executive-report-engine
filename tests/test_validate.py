@@ -42,3 +42,19 @@ def test_hay_bloqueantes_detecta_severidad_alta(ventas_mixtas, venta_blanca):
     """Sirve para que el generador se detenga antes de informar sobre datos malos."""
     assert v.hay_bloqueantes(ventas_mixtas)
     assert not v.hay_bloqueantes(venta_blanca)
+
+
+def test_costo_unitario_en_cero_es_un_problema(venta_blanca):
+    """R17: la búsqueda en la hoja Costos no encontró el producto y dejó $0,00.
+    Lo encontró Marcos revisando el anexo; ahora lo encuentra el motor."""
+    sin_costo = venta_blanca.copy()
+    sin_costo[cfg.COSTO_UNITARIO] = 0.0
+    hallazgos = {h.id: h for h in v.validar(sin_costo)}
+    assert "R17" in hallazgos
+    assert hallazgos["R17"].severidad == v.ALTA
+
+
+def test_costo_unitario_vacio_tambien(venta_blanca):
+    sin_costo = venta_blanca.copy()
+    sin_costo[cfg.COSTO_UNITARIO] = None
+    assert "R17" in [h.id for h in v.validar(sin_costo)]

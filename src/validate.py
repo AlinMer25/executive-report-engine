@@ -60,6 +60,18 @@ def _r03_ganancia_sin_margen(d):
 def _r04_monto_vacio(d):
     return d[cfg.MONTO].isna() | (d[cfg.MONTO] <= 0)
 
+def _r17_costo_cero(d):
+    """Costo unitario en cero o vacío.
+
+    La planilla busca el costo en la hoja Costos; si no encuentra el
+    producto, deja $0,00 por defecto y no da error. La venta queda con
+    margen de casi 100% y infla la ganancia del mes sin que nada falle.
+
+    No estaba en el diccionario. La encontró Marcos revisando el anexo
+    (venta de noviembre 2026 con costo $0,00).
+    """
+    return d[cfg.COSTO_UNITARIO].isna() | (d[cfg.COSTO_UNITARIO] <= 0)
+
 def _r05_costo_mayor_que_ingreso(d):
     return d[m.C_COSTO_SIN_IVA] > (d[m.C_BASE] - d[m.C_COMISION])
 
@@ -183,6 +195,10 @@ REGLAS = [
     ("R16", "Celda con error de fórmula", ALTA,
      "Corregir la fórmula en la planilla. La columna '_errores_formula' "
      "dice qué celda y qué error.", _r16_error_de_formula),
+    ("R17", "Costo unitario en cero o vacío", ALTA,
+     "Cargar el producto en la hoja Costos (la búsqueda no lo encontró y "
+     "dejó $0,00). Sin costo, la venta suma como ganancia casi todo su monto.",
+     _r17_costo_cero),
 ]
 
 
