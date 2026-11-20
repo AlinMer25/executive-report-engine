@@ -87,3 +87,8 @@ def test_recomendaciones_del_mes_con_id():
     escribir("2026-09", [{"id": "2026-09-01", "texto": "Revisar precios"}])
     s = sg.seccion_recomendaciones("2026-09")
     assert s.frases == ["[2026-09-01] Revisar precios"]
+
+
+def test_lo_que_no_existia_y_arranco_esta_en_curso():
+    """El caso Midea: sin ventas en septiembre, primeras ventas en octubre."""
+    assert sg.estado_automatico(None, 4_500_000.0, None) == "en curso"

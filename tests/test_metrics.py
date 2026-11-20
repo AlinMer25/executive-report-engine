@@ -139,3 +139,14 @@ def test_calcular_sin_columnas_de_envio_opcionales(ventas_mixtas):
     d = m.calcular(df)
     assert d[m.C_DIF_ENVIO_RECALC].isna().all()
     assert d[m.C_GANANCIA_NETA].notna().all()
+
+
+def test_filas_sin_dato_se_agrupan_con_nombre_legible(ventas_mixtas):
+    """En la prueba de octubre aparecía 'nan' como categoría y proveedor."""
+    from src import config as cfg
+    df = ventas_mixtas.copy()
+    df.loc[df.index[0], cfg.CATEGORIA] = None
+    t = m.por_dimension(df, cfg.CATEGORIA)
+    assert "Sin categoria" in t.index
+    assert "nan" not in [str(i) for i in t.index]
+    assert t["participacion"].sum() == pytest.approx(100)

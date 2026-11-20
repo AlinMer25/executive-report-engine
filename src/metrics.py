@@ -153,6 +153,11 @@ def por_dimension(df: pd.DataFrame, dimension: str,
     if C_GANANCIA_NETA not in df.columns:
         df = calcular(df)
 
+    # Las filas sin dato en la dimensión se agrupan con un nombre que se
+    # entiende ("Sin categoria"), no como "nan". Siguen sumando al total:
+    # esconderlas haría que las participaciones no sumen 100%.
+    etiqueta = f"Sin {dimension.lower()}"
+    df = df.assign(**{dimension: df[dimension].astype("string").fillna(etiqueta)})
     g = df.groupby(dimension, dropna=False)
     tabla = pd.DataFrame({
         "operaciones": g.size(),
@@ -261,6 +266,11 @@ def fuga_logistica(df: pd.DataFrame, dimension: str = cfg.METODO_ENVIO,
     if margen_referencia is None:
         margen_referencia = df[C_GANANCIA_NETA].sum() / df[C_BASE].sum() * 100
 
+    # Las filas sin dato en la dimensión se agrupan con un nombre que se
+    # entiende ("Sin categoria"), no como "nan". Siguen sumando al total:
+    # esconderlas haría que las participaciones no sumen 100%.
+    etiqueta = f"Sin {dimension.lower()}"
+    df = df.assign(**{dimension: df[dimension].astype("string").fillna(etiqueta)})
     g = df.groupby(dimension, dropna=False)
     t = pd.DataFrame({
         "operaciones": g.size(),

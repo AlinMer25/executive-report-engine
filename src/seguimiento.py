@@ -118,6 +118,8 @@ def estado_automatico(antes: float | None, ahora: float | None,
         return None
     if objetivo is not None and ahora >= objetivo:
         return "cumplida"
+    if antes is None:                  # no existía y ahora sí: arrancó (ej. Midea)
+        return "en curso"
     if antes is not None and ahora > antes:
         return "en curso"
     return "no abordada"
@@ -171,10 +173,12 @@ def seccion_seguimiento(df: pd.DataFrame, periodo: str) -> Seccion:
         dato = "[Completar]"
         if medir:
             antes, ahora = _valor(df_antes, medir), _valor(df_ahora, medir)
+            mt = medir["metrica"]
             if antes is not None and ahora is not None:
-                mt = medir["metrica"]
                 dato = (f"{_formato(mt, antes)} → {_formato(mt, ahora)} "
                         f"({_diferencia(mt, antes, ahora)})")
+            elif ahora is not None:
+                dato = f"sin ventas → {_formato(mt, ahora)}"
             contra = contraejemplos(df_antes, df_ahora, medir)
             if contra:
                 frases.append(f"Atención [{r['id']}]: el agregado esconde "
